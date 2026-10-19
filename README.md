@@ -4,7 +4,7 @@ League of Legends の Live Client Data API を利用したOBS向けオーバー�
 
 スコアボード、分間CS、ゴールドチャート、オブジェクトタイマーをリアルタイムで表示できます。
 
-docs/screenshot.png
+![Screenshot](docs/screenshot.png)
 ``
 
 ## 主な機能
