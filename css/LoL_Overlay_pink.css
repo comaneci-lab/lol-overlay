@@ -1,0 +1,169 @@
+@import url("LoL_Overlay.css");
+
+:root {
+    --theme-accent: #ff80bd;
+    --theme-accent-bright: #ffc2e0;
+    --theme-accent-soft: rgba(255, 117, 187, 0.2);
+    --theme-panel: rgba(37, 13, 32, 0.94);
+    --theme-panel-light: rgba(58, 23, 49, 0.96);
+    --theme-border: rgba(255, 151, 207, 0.5);
+    --theme-glow: rgba(255, 91, 175, 0.25);
+    --theme-enemy: #83ddff;
+    --chart-background: rgba(37, 13, 32, 0.94);
+    --chart-grid: rgba(255, 151, 207, 0.18);
+    --chart-axis: #ffe0f0;
+    --chart-zero-line: rgba(255, 194, 224, 0.68);
+    --chart-ally-line: rgba(255, 128, 189, 1);
+    --chart-ally-fill: rgba(255, 117, 187, 0.3);
+    --chart-enemy-line: rgba(131, 221, 255, 1);
+    --chart-enemy-fill: rgba(91, 205, 255, 0.24);
+}
+
+body {
+    color: #fff0f8;
+}
+
+#GoldDiff,
+.sb-row,
+.active-player-cs,
+.topbar,
+.dragon-slot,
+.dragon-feat-slot,
+.chart-container,
+.overlay-wrapper {
+    background: var(--theme-panel);
+    border: 1px solid var(--theme-border);
+    box-shadow: 0 0 18px var(--theme-glow), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+#GoldDiff,
+.topbar,
+.chart-container,
+.overlay-wrapper {
+    border-radius: 16px;
+}
+
+.sb-row {
+    border-bottom-color: rgba(255, 151, 207, 0.22);
+    transition: background-color 160ms ease, box-shadow 160ms ease;
+}
+
+.rgd-row {
+    background: var(--theme-panel);
+    border-bottom-color: rgba(255, 151, 207, 0.22);
+}
+
+.rgd-diff.rgd-ahead {
+    color: #66b3ff;
+    text-shadow: 0 0 10px rgba(101, 201, 255, 0.28);
+}
+
+.rgd-diff.rgd-behind {
+    color: #ff6666;
+    text-shadow: 0 0 10px rgba(255, 85, 120, 0.22);
+}
+
+.sb-row:hover {
+    background: var(--theme-panel-light);
+    box-shadow: inset 0 0 18px var(--theme-accent-soft);
+}
+
+.sb-diff.diff-ally,
+.diff.blue {
+    color: var(--theme-accent-bright);
+    text-shadow: 0 0 10px var(--theme-glow);
+}
+
+.sb-diff.diff-enemy,
+.diff.red {
+    color: var(--theme-enemy);
+    text-shadow: 0 0 10px rgba(91, 205, 255, 0.24);
+}
+
+.sb-diff.diff-neutral {
+    color: #ead2e1;
+}
+
+.sb-order-stats,
+.sb-chaos-stats {
+    color: #fff0f8;
+}
+
+.sb-champ-icon,
+.sb-item-icon,
+.sb-spell-icon,
+.sb-rune-icon {
+    box-shadow: 0 0 0 1px rgba(255, 218, 239, 0.3);
+}
+
+.myteam-order .sb-order-items,
+.myteam-order .sb-order-runes,
+.myteam-order .sb-order-spells,
+.myteam-order .sb-order-champ,
+.myteam-chaos .sb-chaos-items,
+.myteam-chaos .sb-chaos-runes,
+.myteam-chaos .sb-chaos-spells,
+.myteam-chaos .sb-chaos-champ,
+.topbar .order {
+    color: var(--theme-accent-bright);
+}
+
+.myteam-order .sb-chaos-items,
+.myteam-order .sb-chaos-runes,
+.myteam-order .sb-chaos-spells,
+.myteam-order .sb-chaos-champ,
+.myteam-chaos .sb-order-items,
+.myteam-chaos .sb-order-runes,
+.myteam-chaos .sb-order-spells,
+.myteam-chaos .sb-order-champ,
+.topbar .chaos {
+    color: var(--theme-enemy);
+}
+
+.myteam-order .sb-order-champ img,
+.myteam-order .sb-order-items img,
+.myteam-order .sb-order-spells img,
+.myteam-order .sb-order-runes img,
+.myteam-chaos .sb-chaos-champ img,
+.myteam-chaos .sb-chaos-items img,
+.myteam-chaos .sb-chaos-spells img,
+.myteam-chaos .sb-chaos-runes img {
+    outline: 1px solid rgba(255, 128, 189, 0.78);
+    box-shadow: 0 0 9px var(--theme-glow);
+}
+
+.myteam-order .sb-chaos-champ img,
+.myteam-order .sb-chaos-items img,
+.myteam-order .sb-chaos-spells img,
+.myteam-order .sb-chaos-runes img,
+.myteam-chaos .sb-order-champ img,
+.myteam-chaos .sb-order-items img,
+.myteam-chaos .sb-order-spells img,
+.myteam-chaos .sb-order-runes img {
+    outline: 1px solid rgba(131, 221, 255, 0.7);
+}
+
+.topbar {
+    background: linear-gradient(110deg, rgba(61, 25, 53, 0.97), rgba(34, 13, 31, 0.96));
+    padding: 8px 14px;
+}
+
+.label {
+    color: #e8bdd6;
+}
+
+.value {
+    text-shadow: 0 0 8px var(--theme-glow);
+}
+
+.dragon-slot,
+.dragon-feat-slot {
+    background: var(--theme-panel-light);
+    border-radius: 12px;
+}
+
+#goldChart {
+    border: 1px solid var(--theme-border);
+    border-radius: 16px;
+    box-shadow: 0 0 16px var(--theme-glow);
+}

@@ -1,0 +1,715 @@
+/* ==========================================================================
+   共通: オーバーレイ全体の基本表示
+   背景を透過し、画面全体で共有する文字色・フォントを設定する。
+   ========================================================================== */
+
+body {
+    margin: 0;
+    padding: 0;
+    background: rgba(0, 0, 0, 0);
+    color: #eee;
+    font-family: system-ui, sans-serif;
+}
+
+/* ==========================================================================
+   LoL_GoldDiff.js: ロール別のチャンピオンと金額差
+   各行の左右にチャンピオン、中央に金額差を並べる旧GoldDiff表示用。
+   .gd-champ-icon は LoL_RoleGoldDiff.js からも共有して使用する。
+   ========================================================================== */
+
+#GoldDiff {
+    width: 100%;
+    margin: 20px auto;
+    background: rgba(0, 0, 0, 0.9);
+    padding: 6px 0;
+    border-radius: 6px;
+}
+
+.gd-row {
+    display: grid;
+    grid-template-columns: 32px 80px 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 4px 0;
+    border-bottom: 1px solid #333;
+}
+
+.gd-row:last-child {
+    border-bottom: none;
+}
+
+.gd-team {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.gd-champ-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+}
+
+.gd-diff {
+    font-size: 18px;
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+    text-align: center;
+}
+
+/* ==========================================================================
+   LoL_RoleGoldDiff.js: 自分と相手の同ロール比較
+   チャンピオンアイコンと金額差を1行に表示し、リード状況を色分けする。
+   ========================================================================== */
+
+.rgd-row {
+    display: grid;
+    grid-template-columns: 24px 72px 24px;
+    justify-content: center;
+    align-items: center;
+    column-gap: 8px;
+    min-height: 30px;
+    padding: 2px 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(0, 0, 0, 0.9);
+}
+
+.rgd-row:last-child {
+    border-bottom: none;
+}
+
+.rgd-champion {
+    display: flex;
+    align-items: center;
+}
+
+.rgd-ally {
+    justify-content: center;
+}
+
+.rgd-enemy {
+    justify-content: center;
+}
+
+.rgd-champion .gd-champ-icon {
+    width: 22px;
+    height: 22px;
+}
+
+.rgd-diff {
+    font-size: 15px;
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.rgd-ahead {
+    color: #66b3ff;
+}
+
+.rgd-behind {
+    color: #ff6666;
+}
+
+.rgd-neutral {
+    color: #ccc;
+}
+
+/* RoleGoldDiff.js のウィジェット配置と行コンテナ。 */
+.role-gold-diff-widget {
+    position: absolute;
+    top: var(--role-gold-diff-top);
+    right: var(--role-gold-diff-right);
+    width: var(--role-gold-diff-width);
+    transform: scale(var(--role-gold-diff-scale));
+    transform-origin: top right;
+}
+
+#RoleGoldDiff {
+    width: 100%;
+    overflow: hidden;
+    border-radius: 12px;
+}
+
+/* ==========================================================================
+   LoL_ScoreBord.js: 5ロールのスコアボード
+   アイテム・KDA/CS・ルーン・サモナースペル・チャンピオン・金額差を
+   ORDER と CHAOS の順に配置する。後半の myteam-* ルールは自チーム側を強調。
+   ========================================================================== */
+
+#ScoreBoard {
+    width: 100%;
+    margin: 20px auto;
+    padding: 6px 0;
+    border-radius: 6px;
+}
+
+.sb-diff.diff-ally {
+    color: #66b3ff;
+}
+
+.sb-diff.diff-enemy {
+    color: #ff6666;
+}
+
+.sb-diff.diff-neutral {
+    color: #ccc;
+}
+
+.sb-row {
+    display: grid;
+    grid-template-columns:
+        192px   /* ORDER アイテム */
+        42px    /* ORDER KDA / CS */
+        20px    /* ORDER ルーン */
+        24px    /* ORDER サモスペ */
+        32px    /* ORDER チャンピオン */
+        100px   /* diff */
+        32px    /* CHAOS チャンピオン */
+        24px    /* CHAOS サモスペ */
+        20px    /* CHAOS ルーン */
+        42px    /* CHAOS KDA / CS */
+        192px;  /* CHAOS アイテム */
+
+    align-items: center;
+    padding: 4px 0;
+    border-bottom: 1px solid #333;
+    background: rgba(0, 0, 0, 0.9);
+}
+
+
+.sb-row:last-child {
+    border-bottom: none;
+}
+
+/* ORDER 側 */
+.sb-order-items {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    padding-right: 6px;
+}
+
+.sb-order-spells {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.sb-order-stats,
+.sb-chaos-stats {
+    display: flex;
+    flex-direction: column;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1.3;
+    white-space: nowrap;
+    align-items: center;
+    color: #fff;
+    text-align: center;
+}
+
+.sb-order-champ {
+    display: flex;
+    justify-content: flex-end;
+    padding-right: 4px;
+}
+
+/* CHAOS 側 */
+.sb-chaos-champ {
+    display: flex;
+    justify-content: flex-start;
+    padding-left: 4px;
+}
+
+.sb-chaos-spells {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.sb-chaos-items {
+    display: flex;
+    justify-content: flex-start;
+    gap: 4px;
+    padding-left: 6px;
+}
+
+/* アイコン類 */
+.sb-champ-icon,
+.sb-item-icon,
+.sb-spell-icon,
+.sb-rune-icon {
+    display: inline-block;
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    background: rgba(0, 0, 0, 0.0);
+}
+
+.sb-champ-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 4px;
+}
+
+.sb-champ-portrait {
+    position: relative;
+    display: inline-block;
+    width: 28px;
+    height: 28px;
+    flex: 0 0 28px;
+}
+
+.sb-champ-level {
+    position: absolute;
+    right: -4px;
+    bottom: -4px;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 15px;
+    height: 15px;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    background: #111;
+    color: #fff;
+    font-size: 9px;
+    font-weight: bold;
+    line-height: 1;
+}
+
+.sb-champ-dead {
+    filter: grayscale(1);
+}
+
+.sb-item-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 3px;
+}
+
+.sb-spell-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+}
+
+/* diff */
+.sb-diff {
+    font-size: 18px;
+    font-weight: bold;
+    font-family: "Consolas", monospace;
+    text-align: center;
+    width: 80px;
+    margin: 0 auto;
+}
+
+/* ルーン縦並び */
+.sb-order-runes,
+.sb-chaos-runes {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+}
+
+.sb-rune-icon {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+}
+
+/* スコアボード本体をキャンバス下部に縮小配置する。 */
+.scoreboard-widget {
+    position: absolute;
+    left: var(--scoreboard-left);
+    bottom: var(--scoreboard-bottom);
+    width: var(--scoreboard-width);
+}
+
+.scoreboard-scale-frame {
+    position: relative;
+    width: var(--scoreboard-display-width);
+    height: var(--scoreboard-display-height);
+}
+
+#ScoreBord {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: var(--scoreboard-width);
+    margin: 0;
+    transform: scale(var(--scoreboard-scale));
+    transform-origin: left bottom;
+}
+
+
+
+
+/* ==========================================================================
+   LoL_GoldChart.js: ゴールド推移グラフ
+   グラフの枠、ORDER/CHAOSの凡例、時刻などグラフ表示用の補助要素。
+   ========================================================================== */
+
+.chart-container {
+    background-color: #2a2a2a;
+    border: 2px solid #444;
+    border-radius: 10px;
+    padding: 20px;
+    box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+    height: 100px;
+    margin-bottom: 20px;
+}
+
+#goldChart {
+    width: 100%;
+    height: 150px;
+}
+
+.legend {
+    display: flex;
+    justify-content: center;
+    gap: 40px;
+    margin-bottom: 20px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.1em;
+}
+
+.legend-color {
+    width: 30px;
+    height: 3px;
+    border-radius: 2px;
+}
+
+.legend-color.order {
+    background-color: #0070c0;
+}
+
+.legend-color.chaos {
+    background-color: #c00000;
+}
+
+.timestamp {
+    text-align: center;
+    color: #aaa;
+    font-size: 0.9em;
+    margin-top: 10px;
+}
+
+/* GoldChart.js のキャンバス寸法。幅は表示枠に合わせる。 */
+#goldChart {
+    width: var(--scoreboard-display-width);
+    height: 150px;
+}
+
+#overlay-canvas > #goldChart {
+    position: absolute;
+    left: var(--gold-chart-left);
+    bottom: var(--gold-chart-bottom);
+    transform: scale(var(--gold-chart-scale));
+    transform-origin: left bottom;
+}
+
+.overlay-wrapper {
+    width: 180px;
+    background: rgba(0,0,0,0.6);
+    border: 2px solid #444;
+    border-radius: 10px;
+    padding: 10px;
+    margin: 0 auto;
+    overflow: hidden;
+}
+
+/* ==========================================================================
+   共通: OBSキャンバスとオーバーレイの基本レイアウト
+   画面サイズ、余白、透過背景を共通化し、キャンバス内に部品を配置する。
+   ========================================================================== */
+
+:root {
+    --canvas-width: 1080px;
+    --canvas-height: 1920px;
+    --topbar-top: 0px;
+    --topbar-left: 50%;
+    --topbar-transform: translateX(-50%);
+    --topbar-scale: 1;
+    --gold-chart-left: 0px;
+    --gold-chart-bottom: 180px;
+    --gold-chart-scale: 1;
+    --scoreboard-left: 0px;
+    --scoreboard-bottom: 0px;
+    --scoreboard-width: 720px;
+    --scoreboard-scale: 0.7;
+    --scoreboard-display-width: 504px;
+    --scoreboard-display-height: 180px;
+    --role-gold-diff-top: 100px;
+    --role-gold-diff-right: 24px;
+    --role-gold-diff-width: 240px;
+    --role-gold-diff-scale: 1;
+    --active-player-cs-top: 258px;
+    --active-player-cs-right: 24px;
+    --active-player-cs-width: 240px;
+    --active-player-cs-scale: 1;
+    --object-timer-top: 296px;
+    --object-timer-right: 24px;
+    --object-timer-scale: 1;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html,
+body {
+    width: var(--canvas-width);
+    height: var(--canvas-height);
+    overflow: hidden;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: transparent;
+}
+
+#overlay-canvas {
+    position: relative;
+    width: var(--canvas-width);
+    height: var(--canvas-height);
+    overflow: hidden;
+}
+
+.live-client-data-unavailable .topbar-widget,
+.live-client-data-unavailable .scoreboard-widget,
+.live-client-data-unavailable #goldChart,
+.live-client-data-unavailable .role-gold-diff-widget,
+.live-client-data-unavailable .active-player-cs,
+.live-client-data-unavailable .object-timer-widget {
+    display: none !important;
+}
+
+/* ==========================================================================
+   LoL_CSPerMinute.js: アクティブプレイヤーのCS/分表示
+   データが取得できているとき、画面右側に数値を表示する。
+   ========================================================================== */
+
+.active-player-cs {
+    position: absolute;
+    top: var(--active-player-cs-top);
+    right: var(--active-player-cs-right);
+    width: var(--active-player-cs-width);
+    transform: scale(var(--active-player-cs-scale));
+    transform-origin: top right;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    font-size: 1em;
+    font-weight: bold;
+    text-align: center;
+}
+
+/* ==========================================================================
+   LoL_TopBar.js: トップバーとドラゴン取得状況
+   チーム統計、ゲーム時間、金額差、およびドラゴン/ドラゴンソウルを配置する。
+   ========================================================================== */
+
+.topbar-widget {
+    position: absolute;
+    top: var(--topbar-top);
+    left: var(--topbar-left);
+    width: min(1200px, calc(var(--canvas-width) - 32px));
+    transform: var(--topbar-transform) scale(var(--topbar-scale));
+    transform-origin: top center;
+}
+
+.topbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid #000;
+    border-radius: 8px;
+    padding: 6px 12px;
+    color: #fff;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    font-size: 1.1em;
+}
+
+.side {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+
+.order {
+    justify-content: flex-start;
+    color: #66b3ff;
+}
+
+.chaos {
+    justify-content: flex-end;
+    color: #ff6666;
+}
+
+.entry {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-width: 60px;
+}
+
+.label {
+    font-size: 0.75em;
+    opacity: 0.8;
+}
+
+.value {
+    font-size: 1.2em;
+    font-weight: bold;
+}
+
+.diff {
+    margin: 0 20px;
+    font-size: 1.4em;
+    font-weight: bold;
+}
+
+.topbar-center {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.game-time {
+    font-size: 0.85em;
+    font-weight: bold;
+}
+
+.diff.blue {
+    color: #66b3ff;
+}
+
+.diff.red {
+    color: #ff6666;
+}
+
+/* チームごとのドラゴン取得枠とドラゴンソウルのアイコン配置。 */
+.team-block {
+    margin-top: 10px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 12px;
+}
+
+#order-dragons {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+#chaos-dragons {
+    display: flex;
+    justify-content: flex-start;
+    gap: 6px;
+}
+
+.team-title {
+    width: 120px;
+    font-weight: bold;
+}
+
+.dragons {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.dragon-slot {
+    width: 40px;
+    height: 40px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.dragon-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.dragon-feat-slot {
+    width: 44px;
+    height: 44px;
+    background: rgba(0, 0, 0, 0.9);
+    border: 2px solid rgba(255, 255, 255, 0.25);
+    border-radius: 6px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin: 0 4px;
+}
+
+.dragon-feat-slot img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+}
+
+.object-timer-widget {
+    position: absolute;
+    top: var(--object-timer-top);
+    right: var(--object-timer-right);
+    transform: scale(var(--object-timer-scale));
+    transform-origin: top right;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 8px;
+}
+
+.object-timer-widget[hidden],
+.object-timer-card[hidden] {
+    display: none;
+}
+
+.object-timer-card {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 112px;
+    padding: 6px 10px;
+    border: 1px solid rgba(255, 255, 255, 0.5);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.9);
+    color: #fff;
+    font-size: 1.1em;
+    font-weight: bold;
+}
+
+.object-timer-card img {
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+}
+
+.object-timer-time {
+    min-width: 48px;
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}

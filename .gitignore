@@ -1,3 +1,10 @@
+# This Project ignores files
+_internal
+json
+assets
+*.exe     
+build.bat       
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]

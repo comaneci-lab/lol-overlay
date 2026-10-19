@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        :root {
+            /* 各ウィジェットの表示位置はここでまとめて調整する。 */
+            --topbar-top: 0px;
+            --topbar-left: 50%;
+            --topbar-transform: translateX(-50%);
+            --topbar-scale: 1;
+
+            --gold-chart-left: 0px;
+            --gold-chart-bottom: 230px;
+            --gold-chart-scale: 1.3;
+            --scoreboard-left: 0px;
+            --scoreboard-bottom: 0px;
+            --scoreboard-width: 720px;
+            --scoreboard-display-width: 504px;
+            --scoreboard-scale: 0.9;
+
+            --role-gold-diff-top: 100px;
+            --role-gold-diff-right: 24px;
+            --role-gold-diff-scale: 1;
+            --active-player-cs-top: 258px;
+            --active-player-cs-right: 24px;
+            --active-player-cs-scale: 1;
+            --object-timer-top: 296px;
+            --object-timer-right: 24px;
+            --object-timer-scale: 1;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas" class="live-client-data-unavailable">
+        <div id="goldChart"></div>
+        <div class="scoreboard-widget">
+            <div class="scoreboard-scale-frame">
+                <div id="ScoreBord"></div>
+            </div>
+        </div>
+        <div class="role-gold-diff-widget">
+            <div id="RoleGoldDiff"></div>
+        </div>
+        <div id="active-player-cs" class="active-player-cs" hidden></div>
+    </div>
+
+        <script src="js/LoL_Api.js"></script>
+        <script src="js/LoL_GoldChart.js"></script>
+        <script src="js/LoL_ScoreBord.js"></script>
+        <script src="js/LoL_RoleGoldDiff.js"></script>
+        <script src="js/LoL_TopBar.js"></script>
+        <script src="js/LoL_CSPerMinute.js"></script>
+        <script src="js/LoL_ObjectTimer.js"></script>
+    <script>
+            let chartInitialized = false;
+
+            async function updateOverlay() {
+                await initPlayerTeamMap();
+                updateTeamClass();
+
+                const playerDict = await updataGameData();
+                if (!liveClientDataAvailable) return;
+
+                if (!chartInitialized) {
+                    await initializeChart();
+                    chartInitialized = true;
+                }
+
+                updateScoreBoard(playerDict);
+                updateRoleGoldDiff(playerDict);
+                updateGoldChart(playerDict);
+            }
+
+            async function initializeOverlay() {
+                await initializeCommon();
+                initializeScoreBoard();
+                await updateOverlay();
+                setInterval(updateOverlay, 1000);
+            }
+
+        initializeOverlay();
+    </script>
+</body>
+</html>
