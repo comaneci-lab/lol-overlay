@@ -35,14 +35,14 @@ def serve_static_json(path, url, filename):
 
     if not os.path.exists(path):
         try:
-            print(f"{filename} が無いためダウンロードします...")
+            # print(f"{filename} が無いためダウンロードします...")
             r = requests.get(url, timeout=2)
             r.raise_for_status()
 
             with open(path, "w", encoding="utf-8") as f:
                 json.dump(r.json(), f, ensure_ascii=False, indent=2)
 
-            print(f"{filename} を保存しました。")
+            # print(f"{filename} を保存しました。")
         except Exception as e:
             print(f"{filename} のダウンロードに失敗:", e)
             return jsonify({"ok": False, "error": f"{filename} の取得に失敗しました"}), 500

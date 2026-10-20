@@ -42,19 +42,19 @@ let teamStats = {
 
 async function initializeCommon() {
     championMap = await loadChampionMapFromProxy();
-    console.log("championMap loaded:", championMap);
+    // console.log("championMap loaded:", championMap);
 
     // ★ item.json は Flask の /items から取得
     itemMap = await loadItemMapFromProxy();
-    console.log("itemMap loaded:", itemMap);
+    // console.log("itemMap loaded:", itemMap);
 
     // ★ summoner_spells.json も Flask の /summoner_spells から取得
     summonerSpellMap = await loadSummonerSpellMapFromProxy();
-    console.log("summonerSpellMap loaded:", summonerSpellMap);
+    // console.log("summonerSpellMap loaded:", summonerSpellMap);
 
     // ★ runesReforged.json も Flask の /runes から取得
     runeIconMap = await loadRuneIconMapFromProxy();
-    console.log("runeIconMap loaded:", runeIconMap);
+    // console.log("runeIconMap loaded:", runeIconMap);
     
 }
 
@@ -167,7 +167,7 @@ async function fetchGameData() {
 
         // レスポンスのデータをJSONとして取得
         const dataRoot = await res.json();
-        console.log("API raw response:", dataRoot);
+        // console.log("API raw response:", dataRoot);
 
         if (dataRoot?.ok !== true || !Array.isArray(dataRoot.data?.allPlayers)) {
             setOverlayDataAvailable(false);
@@ -180,7 +180,7 @@ async function fetchGameData() {
         const players = dataRoot.data.allPlayers;
 
         // 取得したプレイヤーデータをログに出力
-        console.log("Extracted players:", players);
+        // console.log("Extracted players:", players);
         return players;
 
     } catch (error) {
@@ -229,10 +229,10 @@ async function updataGameData() {
 
     const playerDict = {};
 
-    console.log("=== updataGameData START ===");
+    // console.log("=== updataGameData START ===");
 
     const playersData = await fetchGameData();
-    console.log("Fetched players data:", playersData);
+    // console.log("Fetched players data:", playersData);
     const assignedPositions = assignPlayerPositions(playersData);
 
     for (const player of playersData) {
@@ -242,7 +242,7 @@ async function updataGameData() {
         const position = assignedPositions.get(player) ?? player.position ?? "";
 
         if (position !== player.position) {
-            console.log(`[ASSIGN POSITION] team=${team}, champ=${champName}, assigned="${position}"`);
+            // console.log(`[ASSIGN POSITION] team=${team}, champ=${champName}, assigned="${position}"`);
         }
 
         // アイテム処理
@@ -271,7 +271,7 @@ async function updataGameData() {
         }
 
         // ★ デバッグ：champName を表示
-        console.log(`[CHAMP] riotid=${riotid}, champName=${champName}:${championMap[champName] ?? "アイコンなし"}`);
+        // console.log(`[CHAMP] riotid=${riotid}, champName=${champName}:${championMap[champName] ?? "アイコンなし"}`);
 
         // ルーン処理
         const runes = player.runes ?? {};
@@ -311,7 +311,7 @@ async function updataGameData() {
 
     }
 
-    console.log("=== updataGameData END ===");
+    // console.log("=== updataGameData END ===");
     return playerDict;
 }
 
@@ -357,7 +357,7 @@ async function initPlayerTeamMap() {
         window.myTeam = null;
     }
 
-    console.log("playerTeamMap:", playerTeamMap, "myTeam:", window.myTeam);
+    // console.log("playerTeamMap:", playerTeamMap, "myTeam:", window.myTeam);
 }
 
 
