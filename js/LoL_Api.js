@@ -6,12 +6,54 @@ let summonerSpellMap = null;
 let runeIconMap = null;
 
 let playerTeamMap = {};
+let assignedPositions = new Map();
+let isGameInitialized = false;
 let CurrentEventID = 0;
 let liveClientDataAvailable = false;
+window.playerDict = {};
 // ブラウザで参照できるように window に設定
 window.myTeam = null;
 
+function getPlayerDict() {
+    return window.playerDict;
+}
+
+function setPlayerDict(playerDict) {
+    window.playerDict = playerDict;
+    window.dispatchEvent(new Event("playerdictupdated"));
+}
+
 function setOverlayDataAvailable(available) {
+    if (!available && liveClientDataAvailable) {
+        isGameInitialized = false;
+        playerTeamMap = {};
+        assignedPositions = new Map();
+        CurrentEventID = 0;
+        teamStats = {
+            ORDER: {
+                HordeKill: 0,
+                HeraldKill: 0,
+                DragonKill: 0,
+                BaronKill: 0,
+                TurretKilled: 0,
+                ChampionKill: 0,
+                teamGold: 0,
+                Dragons: {}
+            },
+            CHAOS: {
+                HordeKill: 0,
+                HeraldKill: 0,
+                DragonKill: 0,
+                BaronKill: 0,
+                TurretKilled: 0,
+                ChampionKill: 0,
+                teamGold: 0,
+                Dragons: {}
+            }
+        };
+        window.myTeam = null;
+    }
+
     liveClientDataAvailable = available;
     document.getElementById("overlay-canvas")
         ?.classList.toggle("live-client-data-unavailable", !available);
@@ -171,30 +213,25 @@ async function fetchGameData() {
 
         if (dataRoot?.ok !== true || !Array.isArray(dataRoot.data?.allPlayers)) {
             setOverlayDataAvailable(false);
-            return [];
+            return null;
         }
 
         setOverlayDataAvailable(true);
 
-        // LiveClientDataAPIのallPlayersを取得
-        const players = dataRoot.data.allPlayers;
-
-        // 取得したプレイヤーデータをログに出力
-        // console.log("Extracted players:", players);
-        return players;
+        return dataRoot;
 
     } catch (error) {
         // エラーが発生した場合の処理
         console.error("fetchGameData error:", error);
         setOverlayDataAvailable(false);
 
-        return [];
+        return null;
     }
 }
 
 function assignPlayerPositions(players) {
     const positions = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
-    const assignedPositions = new Map();
+    const positionsByPlayer = new Map();
 
     for (const team of ["ORDER", "CHAOS"]) {
         const teamPlayers = players.filter(player => player.team === team);
@@ -203,43 +240,38 @@ function assignPlayerPositions(players) {
         for (const player of teamPlayers) {
             const position = String(player.position ?? "").trim().toUpperCase();
             if (positions.includes(position) && !usedPositions.has(position)) {
-                assignedPositions.set(player, position);
+                positionsByPlayer.set(`${player.riotId ?? player.summonerName ?? "Unknown"}_${player.team ?? "Unknown"}`, position);
                 usedPositions.add(position);
             }
         }
 
         teamPlayers.forEach((player, index) => {
-            if (assignedPositions.has(player)) return;
+            const playerKey = `${player.riotId ?? player.summonerName ?? "Unknown"}_${player.team ?? "Unknown"}`;
+            if (positionsByPlayer.has(playerKey)) return;
 
             const preferredPosition = positions[index];
             const position = preferredPosition && !usedPositions.has(preferredPosition)
                 ? preferredPosition
                 : positions.find(candidate => !usedPositions.has(candidate));
 
-            assignedPositions.set(player, position ?? "");
+            positionsByPlayer.set(playerKey, position ?? "");
             if (position) usedPositions.add(position);
         });
     }
 
-    return assignedPositions;
+    return positionsByPlayer;
 }
 
 // Python build_player_data の JS 版
-async function updataGameData() {
+async function updataGameData(playersData) {
 
     const playerDict = {};
-
-    // console.log("=== updataGameData START ===");
-
-    const playersData = await fetchGameData();
-    // console.log("Fetched players data:", playersData);
-    const assignedPositions = assignPlayerPositions(playersData);
 
     for (const player of playersData) {
         const riotid = player.riotId ?? player.summonerName ?? "Unknown";
         const champName = player.championName ?? "Unknown";
         const team = player.team ?? "Unknown";
-        const position = assignedPositions.get(player) ?? player.position ?? "";
+        const position = assignedPositions.get(`${riotid}_${team}`) ?? player.position ?? "";
 
         if (position !== player.position) {
             // console.log(`[ASSIGN POSITION] team=${team}, champ=${champName}, assigned="${position}"`);
@@ -311,53 +343,54 @@ async function updataGameData() {
 
     }
 
-    // console.log("=== updataGameData END ===");
+    setPlayerDict(playerDict);
     return playerDict;
 }
 
-async function initPlayerTeamMap() {
+let isRefreshingPlayerDict = false;
+
+async function refreshPlayerDict() {
+    if (isRefreshingPlayerDict) return;
+    isRefreshingPlayerDict = true;
+
     try {
-        const res = await fetch(ALLGANEDATA_URL, { cache: "no-store" });
-        if (!res.ok) {
-            throw new Error("API fetch failed: " + res.status);
-        }
-        const dataRoot = await res.json();
-        if (dataRoot?.ok !== true || !Array.isArray(dataRoot.data?.allPlayers)) {
-            setOverlayDataAvailable(false);
-            window.myTeam = null;
+        const gameData = await fetchGameData();
+        if (!gameData) {
+            setPlayerDict({});
             return;
         }
 
-        const players = dataRoot.data.allPlayers;
-
-        players.forEach(p => {
-            // 1. riotIdGameName があるなら登録
-            if (p.riotIdGameName) {
-                playerTeamMap[p.riotIdGameName] = p.team;
-            }
-
-            // 2. summonerName も登録（events の KillerName はこっち）
-            if (p.summonerName) {
-                playerTeamMap[p.summonerName] = p.team;
-            }
-        });
-
-        // activePlayer から自分のチームを取得して window.myTeam に保存
-        const activePlayer = dataRoot.data?.activePlayer;
-        if (activePlayer) {
-            // 直接 team が入っている場合はそれを使う。なければマップから参照
-            const team = activePlayer.team ?? playerTeamMap[activePlayer.riotId] ?? playerTeamMap[activePlayer.summonerName];
-            window.myTeam = team ?? null;
-        } else {
-            window.myTeam = null;
+        const players = gameData.data.allPlayers;
+        if (!isGameInitialized) {
+            initPlayerTeamMap(gameData);
+            assignedPositions = assignPlayerPositions(players);
+            isGameInitialized = true;
         }
-    } catch (error) {
-        console.error("initPlayerTeamMap error:", error);
-        setOverlayDataAvailable(false);
+        await updataGameData(players);
+    } finally {
+        isRefreshingPlayerDict = false;
+    }
+}
+
+function initPlayerTeamMap(dataRoot) {
+    const players = dataRoot.data.allPlayers;
+
+    players.forEach(p => {
+        if (p.riotIdGameName) {
+            playerTeamMap[p.riotIdGameName] = p.team;
+        }
+        if (p.summonerName) {
+            playerTeamMap[p.summonerName] = p.team;
+        }
+    });
+
+    const activePlayer = dataRoot.data?.activePlayer;
+    if (activePlayer) {
+        const team = activePlayer.team ?? playerTeamMap[activePlayer.riotId] ?? playerTeamMap[activePlayer.summonerName];
+        window.myTeam = team ?? null;
+    } else {
         window.myTeam = null;
     }
-
-    // console.log("playerTeamMap:", playerTeamMap, "myTeam:", window.myTeam);
 }
 
 

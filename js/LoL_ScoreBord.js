@@ -189,6 +189,11 @@ function updateScoreBoard(playerDict) {
     document.getElementById("ScoreBord").innerHTML = html;
 }
 
+window.addEventListener("playerdictupdated", () => {
+    if (!liveClientDataAvailable) return;
+    updateScoreBoard(getPlayerDict());
+});
+
 const getSpellIcon = (name) => {
     const id = summonerSpellMap?.nameToId?.[name];
     return id ? `assets/spell/${id}.png` : "assets/spell/Unknown.png";

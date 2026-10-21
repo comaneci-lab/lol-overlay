@@ -87,3 +87,8 @@ function updateRoleGoldDiff(playerDict) {
         container.appendChild(row);
     }
 }
+
+window.addEventListener("playerdictupdated", () => {
+    if (!liveClientDataAvailable) return;
+    updateRoleGoldDiff(getPlayerDict());
+});

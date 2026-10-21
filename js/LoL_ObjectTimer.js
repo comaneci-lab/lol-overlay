@@ -2,10 +2,10 @@ const OBJECT_TIMER_URL = "http://localhost:8888/allgamedata";
 const OBJECT_TIMER_LEAD_TIME = 3 * 60;
 
 const OBJECT_TIMER_DEFINITIONS = [
-    { id: "dragon", eventName: "DragonKill", initialSpawnAt: 5 * 60, respawnTime: 5 * 60, icon: "assets/icon_dragon.png" },
+    { id: "dragon", eventName: "DragonKill", initialSpawnAt: 5 * 60, respawnTime: 5 * 60, respawnTimeAfterFifthKill: 6 * 60, icon: "assets/icon_dragon.png" },
     { id: "voidclub", eventName: "HordeKill", initialSpawnAt: 8 * 60, despawnAt: 14 * 60 + 45, respawnTime: null, icon: "assets/icon_voidclub.png" },
     { id: "herald", eventName: "HeraldKill", initialSpawnAt: 15 * 60, despawnAt: 19 * 60 + 45, respawnTime: null, icon: "assets/icon_herald.png" },
-    { id: "baron", eventName: "BaronKill", initialSpawnAt: 20 * 60, respawnTime: 5 * 60, icon: "assets/icon_baron.png" }
+    { id: "baron", eventName: "BaronKill", initialSpawnAt: 20 * 60, respawnTime: 6 * 60, icon: "assets/icon_baron.png" }
 ];
 
 const objectTimerWidget = document.createElement("div");
@@ -39,6 +39,7 @@ let isUpdatingObjectTimers = false;
 let objectTimerInvalidDataLogged = false;
 let objectTimerNextSpawnAt = {};
 let objectTimerLastKillAt = {};
+let objectTimerKillCounts = {};
 let objectTimerKilledOnce = new Set();
 let objectTimerSeenEvents = new Set();
 
@@ -47,6 +48,7 @@ function resetObjectTimerState() {
         OBJECT_TIMER_DEFINITIONS.map(object => [object.id, object.initialSpawnAt])
     );
     objectTimerLastKillAt = {};
+    objectTimerKillCounts = {};
     objectTimerKilledOnce = new Set();
     objectTimerSeenEvents = new Set();
 }
@@ -74,6 +76,9 @@ function processObjectTimerEvents(events, gameTime) {
         const eventTime = event.EventTime != null && Number.isFinite(Number(event.EventTime))
             ? Number(event.EventTime)
             : gameTime;
+        const killCount = (objectTimerKillCounts[object.id] ?? 0) + 1;
+        objectTimerKillCounts[object.id] = killCount;
+
         if (object.respawnTime === null) {
             objectTimerKilledOnce.add(object.id);
             continue;
@@ -82,7 +87,10 @@ function processObjectTimerEvents(events, gameTime) {
         const previousKillAt = objectTimerLastKillAt[object.id];
         if (previousKillAt === undefined || eventTime > previousKillAt) {
             objectTimerLastKillAt[object.id] = eventTime;
-            objectTimerNextSpawnAt[object.id] = eventTime + object.respawnTime;
+            const respawnTime = object.respawnTimeAfterFifthKill && killCount >= 5
+                ? object.respawnTimeAfterFifthKill
+                : object.respawnTime;
+            objectTimerNextSpawnAt[object.id] = eventTime + respawnTime;
         }
     }
 }

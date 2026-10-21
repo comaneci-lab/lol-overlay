@@ -65,6 +65,8 @@ function updateTopbar(data) {
     diffEl.classList.toggle('red', myTeamGoldDiff < 0);
 }
 
+window.addEventListener("playerdictupdated", updateTeamClass);
+
 function formatGameTime(seconds) {
     const totalSeconds = Math.floor(seconds);
     const minutes = Math.floor(totalSeconds / 60);
@@ -131,8 +133,8 @@ function updateTeamClass() {
 
 async function updateTopbarFromGameData() {
     await updateEvents();
-    const playerDict = await updataGameData();
     if (!liveClientDataAvailable) return;
+    const playerDict = getPlayerDict();
 
     const getTeamStats = (team, stats) => {
         const players = Object.values(playerDict).filter(player => player.team === team);

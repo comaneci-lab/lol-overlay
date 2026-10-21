@@ -266,3 +266,23 @@ function updateGoldChart(playerDict) {
     updateAxes();
     window.Plotly.react('goldChart', traces, chartLayout);
 }
+
+let chartInitialized = false;
+let isUpdatingGoldChart = false;
+
+window.addEventListener("playerdictupdated", async () => {
+    if (!liveClientDataAvailable || isUpdatingGoldChart) return;
+    isUpdatingGoldChart = true;
+
+    try {
+        if (!chartInitialized) {
+            await initializeChart();
+            chartInitialized = true;
+        }
+        updateGoldChart(getPlayerDict());
+    } catch (error) {
+        console.error("failed to update gold chart", error);
+    } finally {
+        isUpdatingGoldChart = false;
+    }
+});

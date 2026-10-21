@@ -48,30 +48,11 @@
         <script src="js/LoL_TopBar.js"></script>
         <script src="js/LoL_ObjectTimer.js"></script>
     <script>
-            let chartInitialized = false;
-
-            async function updateOverlay() {
-                await initPlayerTeamMap();
-                updateTeamClass();
-
-                const playerDict = await updataGameData();
-                if (!liveClientDataAvailable) return;
-
-                if (!chartInitialized) {
-                    await initializeChart();
-                    chartInitialized = true;
-                }
-
-                updateScoreBoard(playerDict);
-                updateGoldChart(playerDict);
-            }
-
-            async function initializeOverlay() {
-                await initializeCommon();
-                initializeScoreBoard();
-                await updateOverlay();
-                setInterval(updateOverlay, 1000);
-            }
+        async function initializeOverlay() {
+            await initializeCommon();
+            await refreshPlayerDict();
+            setInterval(refreshPlayerDict, 1000);
+        }
 
         initializeOverlay();
     </script>
