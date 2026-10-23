@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL CS per Minute Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        html,
+        body,
+        #overlay-canvas {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        .active-player-cs {
+            position: static;
+            width: max-content;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas">
+        <div id="active-player-cs" class="active-player-cs" hidden></div>
+    </div>
+
+    <script src="js/LoL_CSPerMinute.js"></script>
+</body>
+</html>

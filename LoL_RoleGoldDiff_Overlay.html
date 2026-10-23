@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Role Gold Difference Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        html,
+        body,
+        #overlay-canvas {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        .role-gold-diff-widget {
+            position: static;
+            width: 240px;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas" class="live-client-data-unavailable">
+        <div class="role-gold-diff-widget">
+            <div id="RoleGoldDiff"></div>
+        </div>
+    </div>
+
+    <script src="js/LoL_Api.js"></script>
+    <script src="js/LoL_RoleGoldDiff.js"></script>
+    <script>
+        async function initializeRoleGoldDiffOverlay() {
+            await initializeCommon();
+            await refreshPlayerDict();
+            setInterval(refreshPlayerDict, 1000);
+        }
+
+        initializeRoleGoldDiffOverlay();
+    </script>
+</body>
+</html>

@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Object Timer Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        html,
+        body,
+        #overlay-canvas {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        .object-timer-widget {
+            position: static;
+            align-items: flex-start;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas"></div>
+
+    <script src="js/LoL_ObjectTimer.js"></script>
+</body>
+</html>

@@ -38,6 +38,8 @@ function setOverlayDataAvailable(available) {
                 TurretKilled: 0,
                 ChampionKill: 0,
                 teamGold: 0,
+                BaronBuffUntil: 0,
+                ElderBuffUntil: 0,
                 Dragons: {}
             },
             CHAOS: {
@@ -48,6 +50,8 @@ function setOverlayDataAvailable(available) {
                 TurretKilled: 0,
                 ChampionKill: 0,
                 teamGold: 0,
+                BaronBuffUntil: 0,
+                ElderBuffUntil: 0,
                 Dragons: {}
             }
         };
@@ -68,6 +72,8 @@ let teamStats = {
         TurretKilled: 0,
         ChampionKill: 0,
         teamGold: 0,
+        BaronBuffUntil: 0,
+        ElderBuffUntil: 0,
         Dragons: {}
     },
     CHAOS: {
@@ -78,6 +84,8 @@ let teamStats = {
         TurretKilled: 0,
         ChampionKill: 0,
         teamGold: 0,
+        BaronBuffUntil: 0,
+        ElderBuffUntil: 0,
         Dragons: {}
     }
 };
@@ -376,17 +384,23 @@ function initPlayerTeamMap(dataRoot) {
     const players = dataRoot.data.allPlayers;
 
     players.forEach(p => {
-        if (p.riotIdGameName) {
-            playerTeamMap[p.riotIdGameName] = p.team;
-        }
-        if (p.summonerName) {
-            playerTeamMap[p.summonerName] = p.team;
+        const identities = [p.riotIdGameName, p.summonerName, p.riotId];
+        for (const identity of identities) {
+            if (typeof identity === "string" && identity.trim()) {
+                playerTeamMap[identity.trim().toLowerCase()] = p.team;
+            }
         }
     });
 
     const activePlayer = dataRoot.data?.activePlayer;
     if (activePlayer) {
-        const team = activePlayer.team ?? playerTeamMap[activePlayer.riotId] ?? playerTeamMap[activePlayer.summonerName];
+        const riotId = typeof activePlayer.riotId === "string"
+            ? activePlayer.riotId.trim().toLowerCase()
+            : "";
+        const summonerName = typeof activePlayer.summonerName === "string"
+            ? activePlayer.summonerName.trim().toLowerCase()
+            : "";
+        const team = activePlayer.team ?? playerTeamMap[riotId] ?? playerTeamMap[summonerName];
         window.myTeam = team ?? null;
     } else {
         window.myTeam = null;
@@ -395,12 +409,15 @@ function initPlayerTeamMap(dataRoot) {
 
 
 
-function applyEvent(ev) {
-    const killer = ev.KillerName;
+function applyEvent(ev, gameTime) {
+    const killer = typeof ev.KillerName === "string" ? ev.KillerName.trim().toLowerCase() : "";
     const team = playerTeamMap[killer];
     if (!team) return;
 
     const t = teamStats[team];
+    const eventTime = ev.EventTime != null && Number.isFinite(Number(ev.EventTime))
+        ? Number(ev.EventTime)
+        : gameTime;
 
     switch (ev.EventName) {
         case "HordeKill":
@@ -412,9 +429,15 @@ function applyEvent(ev) {
         case "DragonKill":
             t.DragonKill++;
             t.Dragons[t.DragonKill] = ev.DragonType;
+            if (String(ev.DragonType).toLowerCase() === "elder" && Number.isFinite(eventTime)) {
+                t.ElderBuffUntil = eventTime + 150;
+            }
             break;
         case "BaronKill":
             t.BaronKill++;
+            if (Number.isFinite(eventTime)) {
+                t.BaronBuffUntil = eventTime + 180;
+            }
             break;
         case "TurretKilled":
             t.TurretKilled++;
@@ -432,12 +455,14 @@ async function updateEvents() {
         const dataRoot = await res.json();
 
         const events = dataRoot.data?.events?.Events ?? [];
+        const gameTime = Number(dataRoot.data?.gameData?.gameTime ?? dataRoot.data?.gameData?.gametime);
 
+        if (Object.keys(playerTeamMap).length === 0) return;
 
         // 新規イベントだけ処理
         for (const ev of events) {
             if (ev.EventID > CurrentEventID) {
-                applyEvent(ev);
+                applyEvent(ev, gameTime);
             }
         }
 

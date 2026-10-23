@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Champion Overlay</title>
+    <style>
+        :root {
+            --minimap-size: 300px;
+            --champion-icon-size: 28px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            width: var(--overlay-width);
+            height: var(--overlay-height);
+            margin: 0;
+            overflow: hidden;
+            background: transparent;
+        }
+
+        #champion-map-markers {
+            position: absolute;
+            left: var(--minimap-left);
+            top: var(--minimap-top);
+            width: var(--minimap-size);
+            height: var(--minimap-size);
+            pointer-events: none;
+        }
+
+        .champion-icon {
+            position: absolute;
+            width: var(--champion-icon-size);
+            height: var(--champion-icon-size);
+            border: 2px solid #42a5ff;
+            border-radius: 50%;
+            background: #101820;
+            box-shadow: 0 1px 4px #000;
+            object-fit: cover;
+            transform: translate(-50%, -50%);
+            transition: left 900ms linear, top 900ms linear;
+        }
+
+        .champion-icon.chaos {
+            border-color: #ff5967;
+        }
+
+        .champion-icon[hidden] {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="champion-map-markers" aria-label="Champion icons"></div>
+    <script src="js/LoL_ChampionMap.js"></script>
+</body>
+</html>

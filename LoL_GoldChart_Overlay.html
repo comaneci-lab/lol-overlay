@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Gold Chart Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        :root {
+            --scoreboard-display-width: 504px;
+        }
+
+        html,
+        body,
+        #overlay-canvas {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        #goldChart,
+        #overlay-canvas > #goldChart {
+            position: static;
+            width: 504px;
+            height: 150px;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas" class="live-client-data-unavailable">
+        <div id="goldChart"></div>
+    </div>
+
+    <script src="js/LoL_Api.js"></script>
+    <script src="js/LoL_GoldChart.js"></script>
+    <script>
+        async function initializeGoldChartOverlay() {
+            await initializeCommon();
+            await refreshPlayerDict();
+            setInterval(refreshPlayerDict, 1000);
+        }
+
+        initializeGoldChartOverlay();
+    </script>
+</body>
+</html>

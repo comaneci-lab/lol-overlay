@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL Scoreboard Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        html,
+        body {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        #overlay-canvas {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        .scoreboard-widget {
+            position: static;
+            width: 720px;
+        }
+
+        .scoreboard-scale-frame {
+            width: 720px;
+            height: 180px;
+        }
+
+        #ScoreBord {
+            position: static;
+            width: 720px;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas" class="live-client-data-unavailable">
+        <div class="scoreboard-widget">
+            <div class="scoreboard-scale-frame">
+                <div id="ScoreBord"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/LoL_Api.js"></script>
+    <script src="js/LoL_ScoreBord.js"></script>
+    <script>
+        async function initializeScoreboardOverlay() {
+            await initializeCommon();
+            await refreshPlayerDict();
+            setInterval(refreshPlayerDict, 1000);
+        }
+
+        initializeScoreboardOverlay();
+    </script>
+</body>
+</html>

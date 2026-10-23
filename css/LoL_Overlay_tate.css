@@ -435,35 +435,6 @@ body {
    画面サイズ、余白、透過背景を共通化し、キャンバス内に部品を配置する。
    ========================================================================== */
 
-:root {
-    --canvas-width: 1080px;
-    --canvas-height: 1920px;
-    --topbar-top: 0px;
-    --topbar-left: 50%;
-    --topbar-transform: translateX(-50%);
-    --topbar-scale: 1;
-    --gold-chart-left: 0px;
-    --gold-chart-bottom: 180px;
-    --gold-chart-scale: 1;
-    --scoreboard-left: 0px;
-    --scoreboard-bottom: 0px;
-    --scoreboard-width: 720px;
-    --scoreboard-scale: 0.7;
-    --scoreboard-display-width: 504px;
-    --scoreboard-display-height: 180px;
-    --role-gold-diff-top: 100px;
-    --role-gold-diff-right: 24px;
-    --role-gold-diff-width: 240px;
-    --role-gold-diff-scale: 1;
-    --active-player-cs-top: 258px;
-    --active-player-cs-right: 24px;
-    --active-player-cs-width: 240px;
-    --active-player-cs-scale: 1;
-    --object-timer-top: 296px;
-    --object-timer-right: 24px;
-    --object-timer-scale: 1;
-}
-
 * {
     margin: 0;
     padding: 0;
@@ -605,11 +576,56 @@ body {
 
 /* チームごとのドラゴン取得枠とドラゴンソウルのアイコン配置。 */
 .team-block {
+    position: relative;
     margin-top: 10px;
     display: flex;
     justify-content: center;
     align-items: center;
     gap: 12px;
+    width: 100%;
+}
+
+.team-buffs {
+    position: absolute;
+    top: 50%;
+    display: flex;
+    flex-direction: row;
+    gap: 6px;
+    transform: translateY(-50%);
+}
+
+.own-buffs {
+    left: 0;
+    align-items: flex-start;
+}
+
+.enemy-buffs {
+    right: 0;
+    align-items: flex-end;
+}
+
+.team-buff-timer {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 92px;
+    padding: 4px 8px;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.9);
+    font-size: 0.9em;
+    font-weight: bold;
+}
+
+.baron-buff {
+    color: #b57aff;
+}
+
+.elder-buff {
+    color: #bfc3c9;
+}
+
+.team-buff-time {
+    font-variant-numeric: tabular-nums;
 }
 
 #order-dragons {

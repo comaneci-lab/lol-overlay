@@ -1,5 +1,5 @@
 const topbarMarkup = `
-    <div class="topbar-widget">
+    <div class="topbar-widget" hidden>
         <div class="topbar">
             <div class="side order" id="orderSide">
                 <div class="entry"><div class="label">VoidClub</div><div class="value" id="order-void">0</div></div>
@@ -25,14 +25,17 @@ const topbarMarkup = `
             </div>
         </div>
         <div class="team-block">
+            <div id="own-buffs" class="team-buffs own-buffs"></div>
             <div id="order-dragons" class="dragons"></div>
             <div id="dragon-feat" class="dragon-feat-slot"></div>
             <div id="chaos-dragons" class="dragons"></div>
+            <div id="enemy-buffs" class="team-buffs enemy-buffs"></div>
         </div>
     </div>
 `;
 
 document.getElementById('overlay-canvas').insertAdjacentHTML('afterbegin', topbarMarkup);
+const topbarWidget = document.querySelector(".topbar-widget");
 
 function updateTopbar(data) {
     document.getElementById('order-void').textContent = data.order.voidClub;
@@ -72,6 +75,37 @@ function formatGameTime(seconds) {
     const minutes = Math.floor(totalSeconds / 60);
     const remainingSeconds = totalSeconds % 60;
     return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
+}
+
+function renderBuffTimers(team, containerId, gameTime) {
+    const container = document.getElementById(containerId);
+    container.innerHTML = "";
+    if (!Number.isFinite(gameTime)) return;
+
+    const buffs = [
+        { label: "Baron", expiresAt: team.BaronBuffUntil },
+        { label: "Elder", expiresAt: team.ElderBuffUntil }
+    ]
+        .map(buff => ({ ...buff, remainingTime: buff.expiresAt - gameTime }))
+        .filter(buff => Number.isFinite(buff.expiresAt) && buff.remainingTime > 0)
+        .sort((a, b) => a.remainingTime - b.remainingTime);
+
+    for (const buff of buffs) {
+        const timer = document.createElement("div");
+        timer.className = "team-buff-timer";
+        timer.classList.add(buff.label.toLowerCase() + "-buff");
+
+        const label = document.createElement("span");
+        label.className = "team-buff-label";
+        label.textContent = buff.label;
+
+        const time = document.createElement("span");
+        time.className = "team-buff-time";
+        time.textContent = formatGameTime(Math.ceil(buff.remainingTime));
+
+        timer.append(label, time);
+        container.appendChild(timer);
+    }
 }
 
 updateTopbar({
@@ -131,7 +165,7 @@ function updateTeamClass() {
     }
 }
 
-async function updateTopbarFromGameData() {
+async function updateTopbarFromGameData(gameTime) {
     await updateEvents();
     if (!liveClientDataAvailable) return;
     const playerDict = getPlayerDict();
@@ -153,6 +187,10 @@ async function updateTopbarFromGameData() {
         order: getTeamStats("ORDER", teamStats.ORDER),
         chaos: getTeamStats("CHAOS", teamStats.CHAOS)
     });
+    const ownTeam = window.myTeam === "CHAOS" ? teamStats.CHAOS : teamStats.ORDER;
+    const enemyTeam = window.myTeam === "CHAOS" ? teamStats.ORDER : teamStats.CHAOS;
+    renderBuffTimers(ownTeam, "own-buffs", gameTime);
+    renderBuffTimers(enemyTeam, "enemy-buffs", gameTime);
     renderDragons(teamStats.ORDER.Dragons, "order-dragons");
     renderDragons(teamStats.CHAOS.Dragons, "chaos-dragons");
     renderDragonFeat(teamStats.ORDER.Dragons, teamStats.CHAOS.Dragons);
@@ -165,27 +203,34 @@ async function refreshTopbar() {
     isUpdatingTopbar = true;
 
     try {
+        let gameTime;
         try {
             const gameDataResp = await fetch("http://localhost:8888/allgamedata", { cache: "no-store" });
             if (!gameDataResp.ok) throw new Error(`status ${gameDataResp.status}`);
             const gameDataResponse = await gameDataResp.json();
             if (gameDataResponse?.ok !== true || !Array.isArray(gameDataResponse.data?.allPlayers)) {
+                topbarWidget.hidden = true;
                 setOverlayDataAvailable(false);
                 return;
             }
 
-            const gameTime = gameDataResponse.data?.gameData?.gametime
+            const gameMode = gameDataResponse.data?.gameData?.gameMode;
+            topbarWidget.hidden = !["CLASSIC", "PRACTICETOOL"].includes(gameMode);
+            if (topbarWidget.hidden) return;
+
+            gameTime = gameDataResponse.data?.gameData?.gametime
                 ?? gameDataResponse.data?.gameData?.gameTime;
             if (Number.isFinite(gameTime)) {
                 document.getElementById("gameTime").textContent = formatGameTime(gameTime);
             }
         } catch (e) {
+            topbarWidget.hidden = true;
             setOverlayDataAvailable(false);
             console.error('failed to fetch game time', e);
             return;
         }
 
-        await updateTopbarFromGameData();
+        await updateTopbarFromGameData(gameTime);
 
     } catch (e) {
         console.error('failed to update topbar', e);

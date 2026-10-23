@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LoL TopBar Overlay</title>
+    <link rel="stylesheet" href="css/LoL_Overlay.css">
+    <style>
+        :root {
+            --topbar-scale: 1;
+        }
+
+        html,
+        body {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        #overlay-canvas {
+            width: max-content;
+            height: max-content;
+            overflow: visible;
+        }
+
+        .topbar-widget {
+            position: static;
+            width: max-content;
+            transform: none;
+        }
+
+        .topbar {
+            width: max-content;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-canvas" class="live-client-data-unavailable"></div>
+
+    <script src="js/LoL_Api.js"></script>
+    <script src="js/LoL_TopBar.js"></script>
+    <script>
+        async function initializeTopBarOverlay() {
+            await initializeCommon();
+            await refreshPlayerDict();
+            setInterval(refreshPlayerDict, 1000);
+        }
+
+        initializeTopBarOverlay();
+    </script>
+</body>
+</html>
