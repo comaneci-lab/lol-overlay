@@ -5,7 +5,7 @@ League of Legends の Live Client Data API を利用したOBS向けオーバー�
 スコアボード、分間CS、ゴールドチャート、オブジェクトタイマーをリアルタイムで表示できます。
 
 ![Screenshot](docs/screenshot.png)
-``
+
 
 ## 主な機能
 
@@ -49,9 +49,10 @@ League of Legends クライアントを起動し、試合を開始します。
 
 LoLAPIGet.exe を実行してください。
 
-このプログラムは League of Legends の Live Client Data API にアクセスするためのローカルプロキシです。
+このプログラムは League of Legends の Live Client Data API にJavaScriptからアクセスするためのローカルプロキシです。
+※JavaScriptからアクセスする場合、CORS（Cross-Origin Resource Sharing）制約によりエラーとなるため、Pythonでローカルプロキシを作成することで回避
 
-正常に起動するとコンソールウィンドウが表示されたままになります。
+正常に起動するとコンソールウィンドウが表示されます。
 
 ### 4. OBSにブラウザソースを追加する
 
@@ -111,6 +112,8 @@ C:\LoLOverlay\LoL_Overlay_Landscape.html
 
 ### 7. 表示機能のカスタマイズ
 
+LoL_Overlay_Landscape.htmlの表示・非表示を変更したい場合は以下を参考にしてください。
+
 - [表示機能の切り替え方法](docs/個別JSの追加と削除.md)
 
 ---
@@ -127,7 +130,7 @@ LoLAPIGet.exe のウィンドウを閉じてください。
 Ctrl + C
 ```
 
-を実行してください。
+を実行しても閉じれます。
 
 ### OBSを終了する
 
@@ -151,6 +154,8 @@ Releaseに含まれている画像ファイルが削除されていないか確�
 
 またはDataDragonから最新の画像を取得してください。
 https://developer.riotgames.com/docs/lol
+
+または、各種jsonを削除・再実行し、最新のjsonを反映させてください。
 
 ---
 
