@@ -321,8 +321,10 @@ async function updataGameData(playersData) {
 
         // サモスペ処理
         const spells = player.summonerSpells ?? {};
-        const summonerSpellOne = spells.summonerSpellOne?.displayName ?? "";
-        const summonerSpellTwo = spells.summonerSpellTwo?.displayName ?? "";
+        const summonerSpellOneData = spells.summonerSpellOne ?? {};
+        const summonerSpellTwoData = spells.summonerSpellTwo ?? {};
+        const summonerSpellOne = summonerSpellOneData.displayName ?? "";
+        const summonerSpellTwo = summonerSpellTwoData.displayName ?? "";
 
         playerDict[`${riotid}_${team}`] = {
             championName: champName,
@@ -334,6 +336,7 @@ async function updataGameData(playersData) {
             level: player.level ?? "",
             scores: player.scores ?? {},
             isDead: player.isDead ?? false,
+            respawnTimer: player.respawnTimer,
 
             // ルーンやサモスペも必要に応じてここに追加
             // keystone,
@@ -344,7 +347,9 @@ async function updataGameData(playersData) {
             },
             summonerSpells: {
                 summonerSpellOne,
-                summonerSpellTwo
+                summonerSpellTwo,
+                summonerSpellOneRawDescription: summonerSpellOneData.rawDescription ?? "",
+                summonerSpellTwoRawDescription: summonerSpellTwoData.rawDescription ?? ""
             }
             // primaryRuneTree,
         };

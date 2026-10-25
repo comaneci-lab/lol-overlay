@@ -4,6 +4,22 @@ let championIconsByName = null;
 let assignedRoles = new Map();
 let refreshInProgress = false;
 let lastReportedError = "";
+const visibilitySettings = {
+    ALLY: {
+        TOP: true,
+        JUNGLE: true,
+        MIDDLE: true,
+        BOTTOM: true,
+        UTILITY: true
+    },
+    ENEMY: {
+        TOP: false,
+        JUNGLE: false,
+        MIDDLE: false,
+        BOTTOM: false,
+        UTILITY: false
+    }
+};
 
 const championRoutes = {
     TOP: [[10, 90], [14, 69], [21, 48], [34, 29], [55, 16], [78, 12], [70, 13], [48, 20], [32, 34], [20, 52]],
@@ -41,6 +57,27 @@ function assignChampionRoles(players) {
 
 function getChampionKey(player) {
     return `${player.riotId ?? player.summonerName ?? player.championName ?? "Unknown"}_${player.team ?? "Unknown"}`;
+}
+
+function getMyTeam(data, players) {
+    const activePlayer = data?.activePlayer;
+    if (["ORDER", "CHAOS"].includes(activePlayer?.team)) {
+        return activePlayer.team;
+    }
+
+    const activePlayerIds = [
+        activePlayer?.riotId,
+        activePlayer?.riotIdGameName,
+        activePlayer?.summonerName
+    ]
+        .filter(id => typeof id === "string" && id.trim())
+        .map(id => id.trim().toLowerCase());
+
+    const player = players.find(candidate =>
+        [candidate.riotId, candidate.riotIdGameName, candidate.summonerName]
+            .some(id => typeof id === "string" && activePlayerIds.includes(id.trim().toLowerCase()))
+    );
+    return ["ORDER", "CHAOS"].includes(player?.team) ? player.team : null;
 }
 
 function getPositionOnRoute(route, gameTime, role, playerKey) {
@@ -85,7 +122,7 @@ async function loadChampionIcons() {
     );
 }
 
-function updateChampionMarkers(players, gameTime) {
+function updateChampionMarkers(players, gameTime, myTeam) {
     const activeKeys = new Set();
 
     for (const player of players) {
@@ -102,6 +139,7 @@ function updateChampionMarkers(players, gameTime) {
             marker.alt = "";
             marker.draggable = false;
             marker.addEventListener("error", () => {
+                marker.dataset.imageError = "true";
                 marker.hidden = true;
             });
             markerLayer.appendChild(marker);
@@ -109,10 +147,11 @@ function updateChampionMarkers(players, gameTime) {
         }
 
         marker.dataset.role = role;
+        marker.dataset.team = player.team;
         marker.title = championName;
         const iconPath = `assets/champion/${encodeURIComponent(championIcon)}.png`;
         if (marker.getAttribute("src") !== iconPath) {
-            marker.hidden = false;
+            marker.dataset.imageError = "false";
             marker.src = iconPath;
         }
 
@@ -123,6 +162,17 @@ function updateChampionMarkers(players, gameTime) {
         }
         marker.style.left = `${x}%`;
         marker.style.top = `${y}%`;
+        const side = myTeam
+            ? player.team === myTeam ? "ALLY" : "ENEMY"
+            : null;
+        const isVisible = marker.dataset.imageError !== "true" &&
+            (!side || visibilitySettings[side][role] !== false);
+        marker.hidden = !isVisible;
+        if (isVisible && marker.parentElement !== markerLayer) {
+            markerLayer.appendChild(marker);
+        } else if (!isVisible && marker.parentElement === markerLayer) {
+            marker.remove();
+        }
         activeKeys.add(key);
     }
 
@@ -144,22 +194,21 @@ async function refreshChampionOverlay() {
         const result = await response.json();
         const data = result?.data;
         const players = data?.allPlayers;
+        const myTeam = getMyTeam(data, players ?? []);
         const gameMode = data?.gameData?.gameMode;
         const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
 
         if (result?.ok !== true || !Array.isArray(players) || !Number.isFinite(gameTime)) {
             throw new Error("invalid game data received for champion overlay");
         }
-
         if (!["CLASSIC", "PRACTICETOOL"].includes(gameMode)) {
             markerLayer.replaceChildren();
             championMarkers.clear();
             return;
         }
-
         if (!championIconsByName) await loadChampionIcons();
         if (assignedRoles.size === 0) assignChampionRoles(players);
-        updateChampionMarkers(players, gameTime);
+        updateChampionMarkers(players, gameTime, myTeam);
         lastReportedError = "";
     } catch (error) {
         if (lastReportedError !== error.message) {

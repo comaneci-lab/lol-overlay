@@ -50,11 +50,16 @@ function renderChampionIcon(player) {
         ? `<span class="sb-champ-level">${Math.trunc(level)}</span>`
         : "";
     const deadClass = player.isDead ? " sb-champ-dead" : "";
+    const respawnTimer = Number(player.respawnTimer);
+    const respawnTimerBadge = player.isDead && player.respawnTimer != null && Number.isFinite(respawnTimer)
+        ? `<span class="sb-champ-respawn-timer">${Math.ceil(respawnTimer)}</span>`
+        : "";
 
     return `
         <span class="sb-champ-portrait">
             <img class="sb-champ-icon${deadClass}" src="assets/champion/${player.championIcon}.png">
             ${levelBadge}
+            ${respawnTimerBadge}
         </span>
     `;
 }
@@ -124,16 +129,16 @@ function renderScoreBoardRows(rows) {
         // --- サモナースペル（縦並び） ---
         const orderSpells = order ? `
             <div class="sb-spells">
-                <img class="sb-spell-icon" src="${getSpellIcon(order.summonerSpells.summonerSpellOne)}">
-                <img class="sb-spell-icon" src="${getSpellIcon(order.summonerSpells.summonerSpellTwo)}">
+                <img class="sb-spell-icon" src="${getSpellIcon(order.summonerSpells.summonerSpellOne, order.summonerSpells.summonerSpellOneRawDescription)}">
+                <img class="sb-spell-icon" src="${getSpellIcon(order.summonerSpells.summonerSpellTwo, order.summonerSpells.summonerSpellTwoRawDescription)}">
             </div>
         ` : "";
 
 
         const chaosSpells = chaos ? `
             <div class="sb-spells">
-                <img class="sb-spell-icon" src="${getSpellIcon(chaos.summonerSpells.summonerSpellOne)}">
-                <img class="sb-spell-icon" src="${getSpellIcon(chaos.summonerSpells.summonerSpellTwo)}">
+                <img class="sb-spell-icon" src="${getSpellIcon(chaos.summonerSpells.summonerSpellOne, chaos.summonerSpells.summonerSpellOneRawDescription)}">
+                <img class="sb-spell-icon" src="${getSpellIcon(chaos.summonerSpells.summonerSpellTwo, chaos.summonerSpells.summonerSpellTwoRawDescription)}">
             </div>
         ` : "";
 
@@ -194,8 +199,27 @@ window.addEventListener("playerdictupdated", () => {
     updateScoreBoard(getPlayerDict());
 });
 
-const getSpellIcon = (name) => {
-    const id = summonerSpellMap?.nameToId?.[name];
+const spellAliases = {
+    "真テレポート": "SummonerTeleport",
+    "アンリーシュド・スマイト": "SummonerSmite",
+    "プライマル・スマイト": "SummonerSmite"
+};
+
+const spellIconsByRawDescription = {
+    "GeneratedTip_SummonerSpell_SummonerTeleport_Description": "SummonerTeleport.png",
+    "GeneratedTip_SummonerSpell_S12_SummonerTeleportUpgrade_Description": "UnleashedTeleport.png",
+    "GeneratedTip_SummonerSpell_SummonerSmite_Description": "SummonerSmite.png",
+    "GeneratedTip_SummonerSpell_SummonerSmiteAvatarUtility_Description": "GustwalkerPrimalSmite.png",
+    "GeneratedTip_SummonerSpell_SummonerSmiteAvatarOffensive_Description": "ScorchclawPrimalSmite.png",
+    "GeneratedTip_SummonerSpell_SummonerSmiteAvatarDefensive_Description": "MosstomperPrimalSmite.png",
+    "GeneratedTip_SummonerSpell_S5_SummonerSmitePlayerGanker_Description": "UnleashedSmite.png"
+};
+
+const getSpellIcon = (name, rawDescription) => {
+    const icon = spellIconsByRawDescription[rawDescription];
+    if (icon) return `assets/spell/${icon}`;
+
+    const id = summonerSpellMap?.nameToId?.[name] ?? spellAliases[name];
     return id ? `assets/spell/${id}.png` : "assets/spell/Unknown.png";
 };
 
