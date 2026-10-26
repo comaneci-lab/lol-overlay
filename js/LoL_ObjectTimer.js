@@ -102,9 +102,10 @@ function renderObjectTimers(gameTime) {
         const spawnAt = objectTimerNextSpawnAt[object.id];
         const remainingTime = spawnAt - gameTime;
         const isBeforeDespawnTime = object.despawnAt === undefined || gameTime < object.despawnAt;
+        const hasRespawnTimer = objectTimerLastKillAt[object.id] !== undefined;
         const shouldShow = !isOneTimeObjectiveKilled &&
             isBeforeDespawnTime &&
-            gameTime >= spawnAt - OBJECT_TIMER_LEAD_TIME;
+            (hasRespawnTimer || gameTime >= spawnAt - OBJECT_TIMER_LEAD_TIME);
 
         card.hidden = !shouldShow;
         if (shouldShow) {

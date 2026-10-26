@@ -214,8 +214,8 @@ async function refreshTopbar() {
                 return;
             }
 
-            const gameMode = gameDataResponse.data?.gameData?.gameMode;
-            topbarWidget.hidden = !["CLASSIC", "PRACTICETOOL"].includes(gameMode);
+            const gameMode = String(gameDataResponse.data?.gameData?.gameMode ?? "").toUpperCase();
+            topbarWidget.hidden = !["CLASSIC", "PRACTICETOOL", "SPECTATOR"].includes(gameMode);
             if (topbarWidget.hidden) return;
 
             gameTime = gameDataResponse.data?.gameData?.gametime

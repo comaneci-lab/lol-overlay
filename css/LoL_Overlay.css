@@ -476,8 +476,7 @@ body {
 .live-client-data-unavailable .scoreboard-widget,
 .live-client-data-unavailable #goldChart,
 .live-client-data-unavailable .role-gold-diff-widget,
-.live-client-data-unavailable .active-player-cs,
-.live-client-data-unavailable .object-timer-widget {
+.live-client-data-unavailable .active-player-cs {
     display: none !important;
 }
 

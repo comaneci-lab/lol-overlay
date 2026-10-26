@@ -392,7 +392,9 @@ function initPlayerTeamMap(dataRoot) {
         const identities = [p.riotIdGameName, p.summonerName, p.riotId];
         for (const identity of identities) {
             if (typeof identity === "string" && identity.trim()) {
-                playerTeamMap[identity.trim().toLowerCase()] = p.team;
+                const normalizedIdentity = identity.trim().toLowerCase();
+                playerTeamMap[normalizedIdentity] = p.team;
+                playerTeamMap[normalizedIdentity.split("#", 1)[0]] = p.team;
             }
         }
     });
@@ -406,9 +408,9 @@ function initPlayerTeamMap(dataRoot) {
             ? activePlayer.summonerName.trim().toLowerCase()
             : "";
         const team = activePlayer.team ?? playerTeamMap[riotId] ?? playerTeamMap[summonerName];
-        window.myTeam = team ?? null;
+        window.myTeam = team ?? "ORDER";
     } else {
-        window.myTeam = null;
+        window.myTeam = "ORDER";
     }
 }
 
@@ -416,8 +418,9 @@ function initPlayerTeamMap(dataRoot) {
 
 function applyEvent(ev, gameTime) {
     const killer = typeof ev.KillerName === "string" ? ev.KillerName.trim().toLowerCase() : "";
-    const team = playerTeamMap[killer];
+    const team = ev.KillerTeam ?? playerTeamMap[killer] ?? playerTeamMap[killer.split("#", 1)[0]];
     if (!team) return;
+    if (team !== "ORDER" && team !== "CHAOS") return;
 
     const t = teamStats[team];
     const eventTime = ev.EventTime != null && Number.isFinite(Number(ev.EventTime))
@@ -462,7 +465,9 @@ async function updateEvents() {
         const events = dataRoot.data?.events?.Events ?? [];
         const gameTime = Number(dataRoot.data?.gameData?.gameTime ?? dataRoot.data?.gameData?.gametime);
 
-        if (Object.keys(playerTeamMap).length === 0) return;
+        if (Object.keys(playerTeamMap).length === 0 && Array.isArray(dataRoot.data?.allPlayers)) {
+            initPlayerTeamMap(dataRoot);
+        }
 
         // 新規イベントだけ処理
         for (const ev of events) {

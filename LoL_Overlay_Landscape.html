@@ -30,12 +30,9 @@
             --role-gold-diff-width: 240px;
             --role-gold-diff-scale: 1;
             --active-player-cs-top: 258px;
-            --active-player-cs-right: 24px;
-            --active-player-cs-width: 240px;
-            --active-player-cs-scale: 1;
-            --object-timer-top: 296px;
-            --object-timer-right: 24px;
-            --object-timer-scale: 1;
+            --object-timer-top: 10px;
+            --object-timer-right: 10px;
+            --object-timer-scale: 1.0;
         }
     </style>
 </head>
@@ -47,18 +44,12 @@
                 <div id="ScoreBord"></div>
             </div>
         </div>
-        <div class="role-gold-diff-widget">
-            <div id="RoleGoldDiff"></div>
-        </div>
-        <div id="active-player-cs" class="active-player-cs" hidden></div>
     </div>
 
         <script src="js/LoL_Api.js"></script>
         <script src="js/LoL_GoldChart.js"></script>
         <script src="js/LoL_ScoreBord.js"></script>
-        <script src="js/LoL_RoleGoldDiff.js"></script>
         <script src="js/LoL_TopBar.js"></script>
-        <script src="js/LoL_CSPerMinute.js"></script>
         <script src="js/LoL_ObjectTimer.js"></script>
         <script>
             async function initializeOverlay() {

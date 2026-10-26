@@ -72,6 +72,8 @@ LoL_Overlay_Landscape.html
 C:\LoLOverlay\LoL_Overlay_Landscape.html
 ```
 
+詳しい手順は[OBS設定手順](docs/OBS設定手順.md)を参照してください。
+
 ### 5. 表示サイズと位置を初期設定する
 
 オーバーレイのキャンバスサイズは、OBSで使う映像の向き・解像度に合わせてください。初期設定は横型が **1920×1080**、縦型が **1080×1920** です。横型を使う場合は `LoL_Overlay_Landscape.html`、縦型を使う場合は `LoL_Overlay_Portrait.html` を編集します。

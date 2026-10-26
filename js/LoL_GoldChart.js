@@ -200,6 +200,26 @@ function updateAxes() {
     chartLayout.yaxis.range = [yMin, yMax];
 }
 
+function resetGoldChart() {
+    if (!hadValidData) return;
+
+    timeData = [];
+    goldDiffData = [];
+    startTime = null;
+    hadValidData = false;
+    chartLayout.xaxis.range = [0, INITIAL_TIME_WIDTH];
+    chartLayout.yaxis.range = [-INITIAL_Y_RANGE, INITIAL_Y_RANGE];
+    chartLayout.shapes = chartLayout.shapes.map(shape =>
+        shape.type === "line" && shape.x0 === 0 && shape.y0 === 0
+            ? { ...shape, x1: MAX_TIME_FIXED }
+            : shape
+    );
+
+    if (chartInitialized && window.Plotly) {
+        window.Plotly.react("goldChart", [], chartLayout);
+    }
+}
+
 
 
 // グラフを更新（1本の折れ線で常に連続させる）
@@ -228,6 +248,7 @@ function updateGoldChart(playerDict) {
     // グラフデータ追加
     timeData.push(elapsed);
     goldDiffData.push(diff);
+    hadValidData = true;
 
     const traces = [];
     if (timeData.length === 0) return;
@@ -271,13 +292,21 @@ let chartInitialized = false;
 let isUpdatingGoldChart = false;
 
 window.addEventListener("playerdictupdated", async () => {
-    if (!liveClientDataAvailable || isUpdatingGoldChart) return;
+    if (!liveClientDataAvailable) {
+        resetGoldChart();
+        return;
+    }
+    if (isUpdatingGoldChart) return;
     isUpdatingGoldChart = true;
 
     try {
         if (!chartInitialized) {
             await initializeChart();
             chartInitialized = true;
+        }
+        if (!liveClientDataAvailable) {
+            resetGoldChart();
+            return;
         }
         updateGoldChart(getPlayerDict());
     } catch (error) {
