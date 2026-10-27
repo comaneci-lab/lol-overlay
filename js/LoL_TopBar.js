@@ -36,8 +36,17 @@ const topbarMarkup = `
 
 document.getElementById('overlay-canvas').insertAdjacentHTML('afterbegin', topbarMarkup);
 const topbarWidget = document.querySelector(".topbar-widget");
+const objectiveStatIds = [
+    "order-void", "order-herald", "order-dragon", "order-baron",
+    "chaos-void", "chaos-herald", "chaos-dragon", "chaos-baron"
+];
 
 function updateTopbar(data) {
+    for (const id of objectiveStatIds) {
+        document.getElementById(id).parentElement.style.display =
+            window.isSpectatorMode ? "none" : "";
+    }
+
     document.getElementById('order-void').textContent = data.order.voidClub;
     document.getElementById('order-herald').textContent = data.order.herald;
     document.getElementById('order-dragon').textContent = data.order.dragon;
@@ -56,7 +65,7 @@ function updateTopbar(data) {
 
     const diff = data.order.teamGold - data.chaos.teamGold;
     const diffEl = document.getElementById('goldDiff');
-    const myTeamGoldDiff = window.myTeam === 'ORDER'
+    const myTeamGoldDiff = window.isSpectatorMode || window.myTeam === 'ORDER'
         ? diff
         : window.myTeam === 'CHAOS'
             ? -diff
@@ -64,8 +73,8 @@ function updateTopbar(data) {
     const displayedDiff = myTeamGoldDiff ?? diff;
     const diffFormatted = displayedDiff.toFixed(1);
     diffEl.textContent = `${displayedDiff > 0 ? '+' : ''}${diffFormatted}K`;
-    diffEl.classList.toggle('blue', myTeamGoldDiff > 0);
-    diffEl.classList.toggle('red', myTeamGoldDiff < 0);
+    diffEl.classList.toggle('blue', displayedDiff > 0);
+    diffEl.classList.toggle('red', displayedDiff < 0);
 }
 
 window.addEventListener("playerdictupdated", updateTeamClass);
@@ -215,6 +224,7 @@ async function refreshTopbar() {
             }
 
             const gameMode = String(gameDataResponse.data?.gameData?.gameMode ?? "").toUpperCase();
+            window.isSpectatorMode = isSpectatorGameData(gameDataResponse.data);
             topbarWidget.hidden = !["CLASSIC", "PRACTICETOOL", "SPECTATOR"].includes(gameMode);
             if (topbarWidget.hidden) return;
 

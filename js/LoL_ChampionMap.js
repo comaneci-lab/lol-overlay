@@ -207,7 +207,7 @@ async function refreshChampionOverlay() {
             return;
         }
         if (!championIconsByName) await loadChampionIcons();
-        if (assignedRoles.size === 0) assignChampionRoles(players);
+        assignChampionRoles(players);
         updateChampionMarkers(players, gameTime, myTeam);
         lastReportedError = "";
     } catch (error) {

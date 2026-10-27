@@ -53,6 +53,7 @@ LoLAPIGet.exe を実行してください。
 ※JavaScriptからアクセスする場合、CORS（Cross-Origin Resource Sharing）制約によりエラーとなるため、Pythonでローカルプロキシを作成することで回避
 
 正常に起動するとコンソールウィンドウが表示されます。
+初回起動時には、`LoLAPIGet.exe` と同じ場所に空の `json` フォルダーを作成します。オーバーレイが各データを要求すると、必要なJSONファイルをData Dragonから取得してこのフォルダーに保存します。JSONファイルは実行ファイルには同梱されません。
 
 ### 4. OBSにブラウザソースを追加する
 

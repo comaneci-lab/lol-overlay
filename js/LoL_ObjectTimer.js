@@ -127,12 +127,19 @@ async function updateObjectTimers() {
         const gameDataResponse = await response.json();
         const data = gameDataResponse?.data;
         const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
-        if (gameDataResponse?.ok !== true || !Number.isFinite(gameTime) || !Array.isArray(data?.events?.Events)) {
+        if (gameDataResponse?.ok !== true || !Array.isArray(data?.allPlayers) ||
+            !Number.isFinite(gameTime) || !Array.isArray(data?.events?.Events)) {
             objectTimerWidget.hidden = true;
             if (!objectTimerInvalidDataLogged) {
                 console.error("invalid game data received for object timers", gameDataResponse);
                 objectTimerInvalidDataLogged = true;
             }
+            return;
+        }
+
+        window.isSpectatorMode = isSpectatorGameData(data);
+        if (window.isSpectatorMode) {
+            objectTimerWidget.hidden = true;
             return;
         }
 

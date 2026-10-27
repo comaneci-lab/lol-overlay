@@ -134,10 +134,13 @@ function makeTrace(start, end, sign, zeroX = null, zeroY = null) {
     const enemyColor = getChartThemeColor('--chart-enemy-line', 'rgba(255,102,102,1)');
     const enemyFill = getChartThemeColor('--chart-enemy-fill', 'rgba(255,102,102,0.25)');
 
-    // sign >= 0 のときは ORDER がリード、sign < 0 のときは CHAOS がリード。
-    // どちらが自チームかで色を決定する。
+    // 観戦時は ORDER リードを青、CHAOS リードを赤に固定する。
+    // 通常プレイ時は自チームのリードを青、相手のリードを赤にする。
     let color, fillColor;
-    if (sign >= 0) {
+    if (window.isSpectatorMode) {
+        color = sign >= 0 ? allyColor : enemyColor;
+        fillColor = sign >= 0 ? allyFill : enemyFill;
+    } else if (sign >= 0) {
         // ORDER がリード
         color = (window.myTeam === 'ORDER') ? allyColor : enemyColor;
         fillColor = (window.myTeam === 'ORDER') ? allyFill : enemyFill;

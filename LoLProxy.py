@@ -3,6 +3,7 @@ import requests
 import urllib3
 import os
 import json
+import sys
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -10,7 +11,8 @@ app = Flask(__name__)
 session = requests.Session()
 
 BASE            = "https://127.0.0.1:2999/liveclientdata"
-JSON_DIR        = os.path.join(os.path.dirname(os.path.abspath(__file__)), "json")
+APP_DIR         = os.path.dirname(os.path.abspath(sys.executable if getattr(sys, "frozen", False) else __file__))
+JSON_DIR        = os.path.join(APP_DIR, "json")
 
 ITEM_PATH           = os.path.join(JSON_DIR, "item.json")
 CHAMPION_PATH       = os.path.join(JSON_DIR, "champion.json")
@@ -22,6 +24,10 @@ SUMMONER_SPELL_URL  = "https://ddragon.leagueoflegends.com/cdn/16.4.1/data/ja_JP
 RUNE_URL            = "https://ddragon.leagueoflegends.com/cdn/16.4.1/data/ja_JP/runesReforged.json"
 
 
+def initialize_json_directory():
+    os.makedirs(JSON_DIR, exist_ok=True)
+
+
 def fetch_lcu(path):
     try:
         r = session.get(f"{BASE}/{path}", verify=False, timeout=0.3)
@@ -31,7 +37,7 @@ def fetch_lcu(path):
 
 
 def serve_static_json(path, url, filename):
-    os.makedirs(JSON_DIR, exist_ok=True)
+    initialize_json_directory()
 
     if not os.path.exists(path):
         try:
@@ -107,4 +113,5 @@ def runes():
 
 
 if __name__ == "__main__":
+    initialize_json_directory()
     app.run(port=8888)
