@@ -546,6 +546,12 @@ body {
     color: #ff6666;
 }
 
+.topbar-widget.spectator-mode .side {
+    flex: 1 1 0;
+    justify-content: space-evenly;
+    gap: 0;
+}
+
 .entry {
     display: flex;
     flex-direction: column;

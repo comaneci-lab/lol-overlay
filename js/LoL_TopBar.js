@@ -42,6 +42,8 @@ const objectiveStatIds = [
 ];
 
 function updateTopbar(data) {
+    topbarWidget.classList.toggle("spectator-mode", window.isSpectatorMode);
+
     for (const id of objectiveStatIds) {
         document.getElementById(id).parentElement.style.display =
             window.isSpectatorMode ? "none" : "";
