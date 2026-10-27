@@ -11,11 +11,37 @@ let isGameInitialized = false;
 let CurrentEventID = 0;
 let liveClientDataAvailable = false;
 window.playerDict = {};
+window.isSpectatorMode = false;
 // ブラウザで参照できるように window に設定
 window.myTeam = null;
 
 function getPlayerDict() {
     return window.playerDict;
+}
+
+function isSpectatorGameData(data) {
+    const gameMode = String(data?.gameData?.gameMode ?? "").toUpperCase();
+    if (gameMode === "SPECTATOR") return true;
+
+    const activePlayer = data?.activePlayer;
+    if (!activePlayer) return true;
+
+    const activePlayerTeam = String(activePlayer.team ?? "").toUpperCase();
+    if (activePlayerTeam === "ORDER" || activePlayerTeam === "CHAOS") return false;
+
+    const getIdentityVariants = (player) => [player?.riotIdGameName, player?.summonerName, player?.riotId]
+        .filter(identity => typeof identity === "string" && identity.trim())
+        .flatMap(identity => {
+            const normalizedIdentity = identity.trim().toLowerCase();
+            return [normalizedIdentity, normalizedIdentity.split("#", 1)[0]];
+        });
+
+    const activeIdentities = new Set(getIdentityVariants(activePlayer));
+    if (activeIdentities.size === 0) return true;
+
+    return !data.allPlayers.some(player =>
+        getIdentityVariants(player).some(identity => activeIdentities.has(identity))
+    );
 }
 
 function setPlayerDict(playerDict) {
@@ -29,6 +55,7 @@ function setOverlayDataAvailable(available) {
         playerTeamMap = {};
         assignedPositions = new Map();
         CurrentEventID = 0;
+        window.isSpectatorMode = false;
         teamStats = {
             ORDER: {
                 HordeKill: 0,
@@ -224,6 +251,7 @@ async function fetchGameData() {
             return null;
         }
 
+        window.isSpectatorMode = isSpectatorGameData(dataRoot.data);
         setOverlayDataAvailable(true);
 
         return dataRoot;
