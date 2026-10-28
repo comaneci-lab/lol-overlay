@@ -136,7 +136,7 @@ async function initializeCommon() {
 }
 
 async function loadItemMapFromProxy() {
-    const res = await fetch("http://localhost:8888/items");
+    const res = await fetch("http://localhost:8888/items", { cache: "no-store" });
     const json = await res.json();
 
     if (!json.ok) {
@@ -159,7 +159,7 @@ async function loadItemMapFromProxy() {
 }
 
 async function loadChampionMapFromProxy() {
-    const res = await fetch("http://localhost:8888/champions");
+    const res = await fetch("http://localhost:8888/champions", { cache: "no-store" });
     const json = await res.json();
 
     if (!json.ok) {
@@ -180,7 +180,7 @@ async function loadChampionMapFromProxy() {
 }
 
 async function loadSummonerSpellMapFromProxy() {
-    const res = await fetch("http://localhost:8888/summoner_spells");
+    const res = await fetch("http://localhost:8888/summoner_spells", { cache: "no-store" });
     const json = await res.json();
 
     if (!json.ok) {
@@ -205,7 +205,7 @@ async function loadSummonerSpellMapFromProxy() {
 }
 
 async function loadRuneIconMapFromProxy() {
-    const res = await fetch("http://localhost:8888/runes");
+    const res = await fetch("http://localhost:8888/runes", { cache: "no-store" });
     const json = await res.json();
 
     const runeTrees = json.data; // ← ここが重要！画像から確認した構造に合わせて修正
