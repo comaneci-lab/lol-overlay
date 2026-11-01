@@ -2,7 +2,7 @@
 
 League of Legends の Live Client Data API を利用したOBS向けオーバーレイです。
 
-スコアボード、分間CS、ゴールドチャート、オブジェクトタイマーをリアルタイムで表示できます。
+スコアボード、分間CS、ゴールドチャート、オブジェクトタイマー、スキルレベルアップ時のアイコンをリアルタイムで表示できます。
 
 ![Screenshot](docs/screenshot.png)
 
@@ -13,6 +13,7 @@ League of Legends の Live Client Data API を利用したOBS向けオーバー�
 - 分間CS表示
 - ゴールドチャート表示
 - オブジェクトタイマー表示
+- スキルレベルアップ時のアイコン表示
 - Data Dragon画像対応
 - OBSブラウザソース対応
 
