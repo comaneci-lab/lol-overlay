@@ -477,8 +477,51 @@ body {
 .live-client-data-unavailable #goldChart,
 .live-client-data-unavailable .role-gold-diff-widget,
 .live-client-data-unavailable .active-player-cs,
-.live-client-data-unavailable .object-timer-widget {
+.live-client-data-unavailable .object-timer-widget,
+.live-client-data-unavailable .skill-level-up-widget {
     display: none !important;
+}
+
+/* ==========================================================================
+   LoL_SkillLevelUp.js: レベルアップしたスキルのアイコン表示
+   ========================================================================== */
+
+.skill-level-up-widget {
+    position: absolute;
+    top: var(--skill-level-up-top);
+    left: 50%;
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    transform: translateX(-50%);
+    pointer-events: none;
+}
+
+.skill-level-up-widget[hidden] {
+    display: none;
+}
+
+.skill-level-up-widget img {
+    width: 48px;
+    height: 48px;
+    zoom: var(--skill-level-up-icon-scale, 1);
+    border: 2px solid #66b3ff;
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.9);
+    box-shadow: 0 0 12px rgba(102, 179, 255, 0.8);
+    animation: skill-level-up-appear 0.25s ease-out;
+}
+
+@keyframes skill-level-up-appear {
+    from {
+        opacity: 0;
+        transform: scale(0.7);
+    }
+
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
 /* ==========================================================================

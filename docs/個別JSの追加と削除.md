@@ -20,6 +20,7 @@ OBSで使っている方のHTMLを編集してください。横型と縦型の�
 | トップバー | `js/LoL_TopBar.js` | 横型・縦型 |
 | 分間CS | `js/LoL_CSPerMinute.js` | 横型 |
 | オブジェクトタイマー | `js/LoL_ObjectTimer.js` | 横型・縦型 |
+| スキルレベルアップ時のアイコン表示 | `js/LoL_SkillLevelUp.js` | 横型・縦型。単独表示は `LoL_SkillLevelUp_Overlay.html` |
 
 `LoL_Api.js` は他の機能が利用する共通ファイルです。特定の表示機能を停止したいだけの場合は、これを削除しないでください。
 
@@ -35,6 +36,7 @@ OBSで使っている方のHTMLを編集してください。横型と縦型の�
 | 分間CS | `<div id="active-player-cs" class="active-player-cs" hidden></div>` | `#overlay-canvas` の内側 |
 | トップバー | 固定の表示用 `div` はありません | JSが `#overlay-canvas` に追加するため、HTMLから削除する要素はありません。 |
 | オブジェクトタイマー | 固定の表示用 `div` はありません | JSが `#overlay-canvas` に追加するため、HTMLから削除する要素はありません。 |
+| スキルレベルアップ時のアイコン表示 | 固定の表示用 `div` はありません | JSが `#overlay-canvas` に追加するため、HTMLから削除する要素はありません。 |
 
 `#overlay-canvas` 自体は複数機能で共有しています。特定の機能を削除するときに、これを削除しないでください。
 

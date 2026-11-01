@@ -2,26 +2,26 @@ const topbarMarkup = `
     <div class="topbar-widget" hidden>
         <div class="topbar">
             <div class="side order" id="orderSide">
-                <div class="entry"><div class="label">VoidClub</div><div class="value" id="order-void">0</div></div>
-                <div class="entry"><div class="label">Herald</div><div class="value" id="order-herald">0</div></div>
-                <div class="entry"><div class="label">Dragon</div><div class="value" id="order-dragon">0</div></div>
-                <div class="entry"><div class="label">Baron</div><div class="value" id="order-baron">0</div></div>
-                <div class="entry"><div class="label">Tower</div><div class="value" id="order-tower">0</div></div>
-                <div class="entry"><div class="label">Kills</div><div class="value" id="order-teamkills">0</div></div>
-                <div class="entry"><div class="label">Gold</div><div class="value" id="order-teamgold">0K</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_voidclub.png" alt="VoidClub"><div class="value" id="order-void">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_herald.png" alt="Herald"><div class="value" id="order-herald">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_dragon.png" alt="Dragon"><div class="value" id="order-dragon">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_baron.png" alt="Baron"><div class="value" id="order-baron">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_tower.png" alt="Tower"><div class="value" id="order-tower">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_kills.png" alt="Kills"><div class="value" id="order-teamkills">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_gold.png" alt="Gold"><div class="value" id="order-teamgold">0K</div></div>
             </div>
             <div class="topbar-center">
                 <div class="diff" id="goldDiff">+0K</div>
                 <div class="game-time" id="gameTime">00:00</div>
             </div>
             <div class="side chaos" id="chaosSide">
-                <div class="entry"><div class="label">Gold</div><div class="value" id="chaos-teamgold">0K</div></div>
-                <div class="entry"><div class="label">Kills</div><div class="value" id="chaos-teamkills">0</div></div>
-                <div class="entry"><div class="label">Tower</div><div class="value" id="chaos-tower">0</div></div>
-                <div class="entry"><div class="label">Baron</div><div class="value" id="chaos-baron">0</div></div>
-                <div class="entry"><div class="label">Dragon</div><div class="value" id="chaos-dragon">0</div></div>
-                <div class="entry"><div class="label">Herald</div><div class="value" id="chaos-herald">0</div></div>
-                <div class="entry"><div class="label">VoidClub</div><div class="value" id="chaos-void">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_gold.png" alt="Gold"><div class="value" id="chaos-teamgold">0K</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_kills.png" alt="Kills"><div class="value" id="chaos-teamkills">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_tower.png" alt="Tower"><div class="value" id="chaos-tower">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_baron.png" alt="Baron"><div class="value" id="chaos-baron">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_dragon.png" alt="Dragon"><div class="value" id="chaos-dragon">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_herald.png" alt="Herald"><div class="value" id="chaos-herald">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_voidclub.png" alt="VoidClub"><div class="value" id="chaos-void">0</div></div>
             </div>
         </div>
         <div class="team-block">
@@ -124,11 +124,11 @@ updateTopbar({
     chaos: { voidClub: 0, herald: 0, dragon: 0, baron: 0, tower: 0, teamKills: 0, teamGold: 0 }
 });
 
-function renderDragons(dragonData, containerId) {
+function renderDragons(dragonData, containerId, reverse = false) {
     const container = document.getElementById(containerId);
     container.innerHTML = "";
 
-    for (let i = 1; i <= 4; i++) {
+    for (let i = reverse ? 4 : 1; reverse ? i >= 1 : i <= 4; i += reverse ? -1 : 1) {
         const slot = document.createElement("div");
         slot.className = "dragon-slot";
 
@@ -203,7 +203,7 @@ async function updateTopbarFromGameData(gameTime) {
     renderBuffTimers(ownTeam, "own-buffs", gameTime);
     renderBuffTimers(enemyTeam, "enemy-buffs", gameTime);
     renderDragons(teamStats.ORDER.Dragons, "order-dragons");
-    renderDragons(teamStats.CHAOS.Dragons, "chaos-dragons");
+    renderDragons(teamStats.CHAOS.Dragons, "chaos-dragons", true);
     renderDragonFeat(teamStats.ORDER.Dragons, teamStats.CHAOS.Dragons);
 }
 

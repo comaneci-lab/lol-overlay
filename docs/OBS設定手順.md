@@ -34,6 +34,7 @@
 | `LoL_TopBar_Overlay.html` | 1120 | 130 | 内容に合わせたサイズ。OBSプレビューを見て調整 |
 | `LoL_RoleGoldDiff_Overlay.html` | 240 | 200 | 高さは表示内容に合わせて調整 |
 | `LoL_ObjectTimer_Overlay.html` | 120 | 200 | 表示されるタイマー数に合わせて調整 |
+| `LoL_SkillLevelUp_Overlay.html` | 固定値なし | 固定値なし | スキルレベルアップ時に表示されるアイコンに合わせて調整 |
 | `LoL_ChampionMap_Overlay.html` | 300 | 300 | ミニマップ上に配置する全画面オーバーレイ |
 | `LoL_CSPerMinute_Overlay.html` | 固定値なし | 固定値なし | 内容に合わせたサイズ。OBSプレビューを見て調整 |
 
