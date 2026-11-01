@@ -1,7 +1,14 @@
 # This Project ignores files
 _internal
 json
-assets
+assets/*
+!assets/topbar_icon_dragon.png
+!assets/topbar_icon_herald.png
+!assets/topbar_icon_voidclub.png
+!assets/topbar_icon_tower.png
+!assets/topbar_icon_gold.png
+!assets/topbar_icon_baron.png
+!assets/topbar_icon_kills.png
 *.exe     
 build.bat       
 !build.bat
