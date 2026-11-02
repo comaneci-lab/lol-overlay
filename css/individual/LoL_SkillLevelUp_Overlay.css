@@ -1,0 +1,25 @@
+:root {
+    --skill-level-up-icon-scale: 2.0;
+}
+
+html,
+body {
+    width: 100%;
+    height: max-content;
+    overflow: visible;
+}
+
+#overlay-canvas {
+    display: flex;
+    justify-content: center;
+    width: 100%;
+    height: max-content;
+    overflow: visible;
+}
+
+.skill-level-up-widget {
+    position: static;
+    justify-content: center;
+    width: 100%;
+    transform: none;
+}

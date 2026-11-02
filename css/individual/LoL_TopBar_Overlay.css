@@ -1,0 +1,21 @@
+:root {
+    --topbar-scale: 1;
+}
+
+html,
+body,
+#overlay-canvas {
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+}
+
+.topbar-widget {
+    position: static;
+    width: max-content;
+    transform: none;
+}
+
+.topbar {
+    width: max-content;
+}

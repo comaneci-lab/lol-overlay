@@ -149,7 +149,7 @@ function updateChampionMarkers(players, gameTime, myTeam) {
         marker.dataset.role = role;
         marker.dataset.team = player.team;
         marker.title = championName;
-        const iconPath = `assets/champion/${encodeURIComponent(championIcon)}.png`;
+        const iconPath = `../assets/champion/${encodeURIComponent(championIcon)}.png`;
         if (marker.getAttribute("src") !== iconPath) {
             marker.dataset.imageError = "false";
             marker.src = iconPath;

@@ -3,7 +3,7 @@
 ## 1. LoL Overlay を準備する
 
 1. GitHub Releases からダウンロードしたZIPファイルを展開します。
-2. 展開したフォルダー内のファイルやフォルダーは、移動・削除せず同じ場所に置いてください。HTMLからCSS、画像、JavaScriptを読み込むために必要です。
+2. 展開したフォルダー内のファイルやフォルダーは、移動・削除せず同じ場所に置いてください。OBSで選択するHTMLは `html` フォルダー内にあります。HTMLからCSS、画像、JavaScriptを読み込むために必要です。
 3. League of Legends を起動して試合に参加します。
 4. `LoLAPIGet.exe` を起動します。データ取得中はウィンドウを開いたままにしてください。
 
@@ -23,20 +23,20 @@
 
 ### HTMLファイル別の幅・高さ
 
-以下はHTML内で指定されているキャンバス、またはウィジェットの寸法です。OBSのブラウザソースにも同じ幅・高さを入力してください。
+以下はHTML内で指定されているキャンバス、またはウィジェットの寸法です。個別HTMLを使う場合、表示したい機能ごとにブラウザーソースを追加してください。OBSのブラウザーソースにも該当する幅・高さを入力します。全体オーバーレイを使う場合は[横型・縦型オーバーレイの設定](横型・縦型オーバーレイ.md)も参照してください。
 
 | HTMLファイル | 幅 | 高さ | 備考 |
 | --- | ---: | ---: | --- |
-| `LoL_Overlay_Landscape.html` | 1920 | 1080 | 横型の全体オーバーレイ |
-| `LoL_Overlay_Portrait.html` | 1080 | 1920 | 縦型の全体オーバーレイ |
-| `LoL_GoldChart_Overlay.html` | 504 | 150 | ゴールドチャート |
-| `LoL_Scoreboard_Overlay.html` | 720 | 180 | スコアボード |
-| `LoL_TopBar_Overlay.html` | 1120 | 130 | 内容に合わせたサイズ。OBSプレビューを見て調整 |
-| `LoL_RoleGoldDiff_Overlay.html` | 240 | 200 | 高さは表示内容に合わせて調整 |
-| `LoL_ObjectTimer_Overlay.html` | 120 | 200 | 表示されるタイマー数に合わせて調整 |
-| `LoL_SkillLevelUp_Overlay.html` | 固定値なし | 固定値なし | スキルレベルアップ時に表示されるアイコンに合わせて調整 |
-| `LoL_ChampionMap_Overlay.html` | 300 | 300 | ミニマップ上に配置する全画面オーバーレイ |
-| `LoL_CSPerMinute_Overlay.html` | 固定値なし | 固定値なし | 内容に合わせたサイズ。OBSプレビューを見て調整 |
+| `html/LoL_Overlay_Landscape.html` | 1920 | 1080 | 横型の全体オーバーレイ |
+| `html/LoL_Overlay_Portrait.html` | 1080 | 1920 | 縦型の全体オーバーレイ |
+| `html/LoL_GoldChart_Overlay.html` | 504 | 150 | ゴールドチャート |
+| `html/LoL_Scoreboard_Overlay.html` | 720 | 180 | スコアボード |
+| `html/LoL_TopBar_Overlay.html` | 1120 | 130 | 内容に合わせたサイズ。OBSプレビューを見て調整 |
+| `html/LoL_RoleGoldDiff_Overlay.html` | 240 | 200 | 高さは表示内容に合わせて調整 |
+| `html/LoL_ObjectTimer_Overlay.html` | 120 | 200 | 表示されるタイマー数に合わせて調整 |
+| `html/LoL_SkillLevelUp_Overlay.html` | 固定値なし | 固定値なし | スキルレベルアップ時に表示されるアイコンに合わせて調整 |
+| `html/LoL_ChampionMap_Overlay.html` | 300 | 300 | ミニマップ上に配置する全画面オーバーレイ |
+| `html/LoL_CSPerMinute_Overlay.html` | 固定値なし | 固定値なし | 内容に合わせたサイズ。OBSプレビューを見て調整 |
 
 「固定値なし」のHTMLは、表示内容や調整により必要な範囲が変わります。ブラウザソースの幅・高さを設定した後、OBSプレビューで表示が切れないサイズに調整してください。
 
@@ -46,6 +46,5 @@
 
 ## 補足
 
-- OBS の基本（キャンバス）解像度を変更する場合は、ブラウザソースの幅・高さとHTML内の `--canvas-width`、`--canvas-height` も同じ解像度に合わせてください。
-- 表示位置や大きさを調整する方法は、[README のセットアップ手順](../README.md#5-表示サイズと位置を初期設定する)を参照してください。
+- 全体オーバーレイのキャンバスサイズや表示位置を調整する場合は、[横型・縦型オーバーレイの設定](横型・縦型オーバーレイ.md)を参照してください。
 - OBS を終了するときは、`LoLAPIGet.exe` のウィンドウも閉じてください。

@@ -2,26 +2,26 @@ const topbarMarkup = `
     <div class="topbar-widget" hidden>
         <div class="topbar">
             <div class="side order" id="orderSide">
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_voidclub.png" alt="VoidClub"><div class="value" id="order-void">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_herald.png" alt="Herald"><div class="value" id="order-herald">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_dragon.png" alt="Dragon"><div class="value" id="order-dragon">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_baron.png" alt="Baron"><div class="value" id="order-baron">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_tower.png" alt="Tower"><div class="value" id="order-tower">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_kills.png" alt="Kills"><div class="value" id="order-teamkills">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_gold.png" alt="Gold"><div class="value" id="order-teamgold">0K</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_voidclub.png" alt="VoidClub"><div class="value" id="order-void">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_herald.png" alt="Herald"><div class="value" id="order-herald">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_dragon.png" alt="Dragon"><div class="value" id="order-dragon">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_baron.png" alt="Baron"><div class="value" id="order-baron">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_tower.png" alt="Tower"><div class="value" id="order-tower">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_kills.png" alt="Kills"><div class="value" id="order-teamkills">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_gold.png" alt="Gold"><div class="value" id="order-teamgold">0K</div></div>
             </div>
             <div class="topbar-center">
                 <div class="diff" id="goldDiff">+0K</div>
                 <div class="game-time" id="gameTime">00:00</div>
             </div>
             <div class="side chaos" id="chaosSide">
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_gold.png" alt="Gold"><div class="value" id="chaos-teamgold">0K</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_kills.png" alt="Kills"><div class="value" id="chaos-teamkills">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_tower.png" alt="Tower"><div class="value" id="chaos-tower">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_baron.png" alt="Baron"><div class="value" id="chaos-baron">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_dragon.png" alt="Dragon"><div class="value" id="chaos-dragon">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_herald.png" alt="Herald"><div class="value" id="chaos-herald">0</div></div>
-                <div class="entry icon-entry"><img class="stat-icon" src="assets/topbar_icon_voidclub.png" alt="VoidClub"><div class="value" id="chaos-void">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_gold.png" alt="Gold"><div class="value" id="chaos-teamgold">0K</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_kills.png" alt="Kills"><div class="value" id="chaos-teamkills">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_tower.png" alt="Tower"><div class="value" id="chaos-tower">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_baron.png" alt="Baron"><div class="value" id="chaos-baron">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_dragon.png" alt="Dragon"><div class="value" id="chaos-dragon">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_herald.png" alt="Herald"><div class="value" id="chaos-herald">0</div></div>
+                <div class="entry icon-entry"><img class="stat-icon" src="../assets/topbar_icon_voidclub.png" alt="VoidClub"><div class="value" id="chaos-void">0</div></div>
             </div>
         </div>
         <div class="team-block">
@@ -36,18 +36,10 @@ const topbarMarkup = `
 
 document.getElementById('overlay-canvas').insertAdjacentHTML('afterbegin', topbarMarkup);
 const topbarWidget = document.querySelector(".topbar-widget");
-const objectiveStatIds = [
-    "order-void", "order-herald", "order-dragon", "order-baron",
-    "chaos-void", "chaos-herald", "chaos-dragon", "chaos-baron"
-];
+const dragonIconTypes = new Set(["Air", "Earth", "Fire", "Water", "Chemtech", "Hextech"]);
 
 function updateTopbar(data) {
     topbarWidget.classList.toggle("spectator-mode", window.isSpectatorMode);
-
-    for (const id of objectiveStatIds) {
-        document.getElementById(id).parentElement.style.display =
-            window.isSpectatorMode ? "none" : "";
-    }
 
     document.getElementById('order-void').textContent = data.order.voidClub;
     document.getElementById('order-herald').textContent = data.order.herald;
@@ -136,7 +128,7 @@ function renderDragons(dragonData, containerId, reverse = false) {
 
         if (name) {
             const img = document.createElement("img");
-            img.src = `assets/dragon/${name}.png`;
+            img.src = dragonIconTypes.has(name) ? `../assets/dragon/${name}.png` : "../assets/icon_dragon.png";
             img.alt = name;
             slot.appendChild(img);
         }
@@ -161,7 +153,9 @@ function renderDragonFeat(orderDragons, chaosDragons) {
 
     if (featDragon) {
         const img = document.createElement("img");
-        img.src = `assets/dragon/${featDragon}_feat.png`;
+        img.src = dragonIconTypes.has(featDragon)
+            ? `../assets/dragon/${featDragon}_feat.png`
+            : "../assets/icon_dragon.png";
         img.alt = featDragon + "_feat";
         featContainer.appendChild(img);
     }
@@ -198,8 +192,12 @@ async function updateTopbarFromGameData(gameTime) {
         order: getTeamStats("ORDER", teamStats.ORDER),
         chaos: getTeamStats("CHAOS", teamStats.CHAOS)
     });
-    const ownTeam = window.myTeam === "CHAOS" ? teamStats.CHAOS : teamStats.ORDER;
-    const enemyTeam = window.myTeam === "CHAOS" ? teamStats.ORDER : teamStats.CHAOS;
+    const ownTeam = window.isSpectatorMode
+        ? teamStats.ORDER
+        : window.myTeam === "CHAOS" ? teamStats.CHAOS : teamStats.ORDER;
+    const enemyTeam = window.isSpectatorMode
+        ? teamStats.CHAOS
+        : window.myTeam === "CHAOS" ? teamStats.ORDER : teamStats.CHAOS;
     renderBuffTimers(ownTeam, "own-buffs", gameTime);
     renderBuffTimers(enemyTeam, "enemy-buffs", gameTime);
     renderDragons(teamStats.ORDER.Dragons, "order-dragons");
@@ -227,6 +225,10 @@ async function refreshTopbar() {
 
             const gameMode = String(gameDataResponse.data?.gameData?.gameMode ?? "").toUpperCase();
             window.isSpectatorMode = isSpectatorGameData(gameDataResponse.data);
+            if (window.isSpectatorMode && !gameDataResponse.data?.spectatorData) {
+                topbarWidget.hidden = true;
+                return;
+            }
             topbarWidget.hidden = !["CLASSIC", "PRACTICETOOL", "SPECTATOR"].includes(gameMode);
             if (topbarWidget.hidden) return;
 

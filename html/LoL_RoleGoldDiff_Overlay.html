@@ -4,22 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>LoL Role Gold Difference Overlay</title>
-    <link rel="stylesheet" href="css/LoL_Overlay.css">
-    <style>
-        html,
-        body,
-        #overlay-canvas {
-            width: max-content;
-            height: max-content;
-            overflow: visible;
-        }
-
-        .role-gold-diff-widget {
-            position: static;
-            width: 240px;
-            transform: none;
-        }
-    </style>
+    <link rel="stylesheet" href="../css/LoLOverlay.css">
+    <link rel="stylesheet" href="../css/individual/LoL_RoleGoldDiff_Overlay.css">
 </head>
 <body>
     <div id="overlay-canvas" class="live-client-data-unavailable">
@@ -28,8 +14,8 @@
         </div>
     </div>
 
-    <script src="js/LoL_Api.js"></script>
-    <script src="js/LoL_RoleGoldDiff.js"></script>
+    <script src="../js/LoL_Api.js"></script>
+    <script src="../js/LoL_RoleGoldDiff.js"></script>
     <script>
         async function initializeRoleGoldDiffOverlay() {
             await initializeCommon();

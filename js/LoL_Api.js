@@ -218,11 +218,11 @@ async function loadRuneIconMapFromProxy() {
     const map = {};
 
     for (const tree of runeTrees) {
-        map[tree.name] = `assets/${tree.icon}`; // 例: "覇道" → "assets/perk-images/Styles/7200_Domination.png"
+        map[tree.name] = `../assets/${tree.icon}`; // 例: "覇道" → "assets/perk-images/Styles/7200_Domination.png"
 
         for (const slot of tree.slots) {
             for (const rune of slot.runes) {
-                map[rune.name] = `assets/${rune.icon}`; // 例: "電撃" → "assets/perk-images/Styles/Domination/Electrocute/Electrocute.png"
+                map[rune.name] = `../assets/${rune.icon}`; // 例: "電撃" → "assets/perk-images/Styles/Domination/Electrocute/Electrocute.png"
             }
         }
     }
@@ -489,12 +489,36 @@ async function updateEvents() {
 
         const res = await fetch(ALLGANEDATA_URL);
         const dataRoot = await res.json();
+        const data = dataRoot.data;
 
-        const events = dataRoot.data?.events?.Events ?? [];
-        const gameTime = Number(dataRoot.data?.gameData?.gameTime ?? dataRoot.data?.gameData?.gametime);
+        const events = data?.events?.Events ?? [];
+        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        window.isSpectatorMode = data?.isSpectatorMode === true || isSpectatorGameData(data);
 
-        if (Object.keys(playerTeamMap).length === 0 && Array.isArray(dataRoot.data?.allPlayers)) {
+        if (Object.keys(playerTeamMap).length === 0 && Array.isArray(data?.allPlayers)) {
             initPlayerTeamMap(dataRoot);
+        }
+
+        if (window.isSpectatorMode) {
+            const manualTeams = data?.spectatorData?.teams;
+            if (!manualTeams?.ORDER || !manualTeams?.CHAOS) {
+                throw new Error("観戦モードの手動データがありません。");
+            }
+
+            for (const team of ["ORDER", "CHAOS"]) {
+                const manualStats = manualTeams[team];
+                const stats = teamStats[team];
+                stats.HordeKill = Number(manualStats.HordeKill);
+                stats.HeraldKill = Number(manualStats.HeraldKill);
+                stats.DragonKill = Number(manualStats.DragonKill);
+                stats.BaronKill = Number(manualStats.BaronKill);
+                stats.Dragons = Object.fromEntries(
+                    (manualStats.Dragons ?? []).slice(0, 4).map((dragon, index) => [index + 1, dragon])
+                );
+                stats.BaronBuffUntil = Number(manualStats.BaronBuffUntil ?? 0);
+                stats.ElderBuffUntil = Number(manualStats.ElderBuffUntil ?? 0);
+            }
+            return;
         }
 
         // 新規イベントだけ処理

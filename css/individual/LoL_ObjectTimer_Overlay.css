@@ -1,0 +1,13 @@
+html,
+body,
+#overlay-canvas {
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+}
+
+.object-timer-widget {
+    position: static;
+    align-items: flex-start;
+    transform: none;
+}

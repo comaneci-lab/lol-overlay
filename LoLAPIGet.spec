@@ -1,11 +1,30 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+import os
+
+GUI_IMAGES = (
+    'dragon_chemtech.png',
+    'dragon_cloud.png',
+    'dragon_elder.png',
+    'dragon_hextech.png',
+    'dragon_infernal.png',
+    'dragon_mountain.png',
+    'dragon_ocean.png',
+    'icon_baron.png',
+    'icon_dragon.png',
+    'icon_herald.png',
+    'icon_voidclub.png',
+)
+
 
 a = Analysis(
     ['LoLProxy.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[
+        (os.path.join(SPECPATH, 'assets', image), 'assets')
+        for image in GUI_IMAGES
+    ],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},

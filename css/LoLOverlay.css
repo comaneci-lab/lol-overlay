@@ -549,7 +549,7 @@ body {
     position: absolute;
     top: var(--topbar-top);
     left: var(--topbar-left);
-    width: min(850px, calc(var(--canvas-width) - 32px));
+    width: min(900px, calc(var(--canvas-width) - 32px));
     transform: var(--topbar-transform) scale(var(--topbar-scale));
     transform-origin: top center;
 }

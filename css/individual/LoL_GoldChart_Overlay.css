@@ -1,0 +1,19 @@
+:root {
+    --scoreboard-display-width: 504px;
+}
+
+html,
+body,
+#overlay-canvas {
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+}
+
+#goldChart,
+#overlay-canvas > #goldChart {
+    position: static;
+    width: 504px;
+    height: 150px;
+    transform: none;
+}

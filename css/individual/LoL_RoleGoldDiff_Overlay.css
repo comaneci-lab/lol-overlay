@@ -1,0 +1,13 @@
+html,
+body,
+#overlay-canvas {
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+}
+
+.role-gold-diff-widget {
+    position: static;
+    width: 240px;
+    transform: none;
+}

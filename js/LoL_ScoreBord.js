@@ -57,7 +57,7 @@ function renderChampionIcon(player) {
 
     return `
         <span class="sb-champ-portrait">
-            <img class="sb-champ-icon${deadClass}" src="assets/champion/${player.championIcon}.png">
+            <img class="sb-champ-icon${deadClass}" src="../assets/champion/${player.championIcon}.png">
             ${levelBadge}
             ${respawnTimerBadge}
         </span>
@@ -81,7 +81,7 @@ function renderScoreBoardRows(rows) {
         // --- アイテム ---
         const orderItems = order ? order.items
             .sort((a, b) => a.slot - b.slot)
-            .map(i => `<img class="sb-item-icon" src="assets/items/${i.itemID}.png">`)
+            .map(i => `<img class="sb-item-icon" src="../assets/items/${i.itemID}.png">`)
             .join("") : "";
 
         const orderScores = order?.scores ?? {};
@@ -94,7 +94,7 @@ function renderScoreBoardRows(rows) {
 
         const chaosItems = chaos ? chaos.items
             .sort((a, b) => a.slot - b.slot)
-            .map(i => `<img class="sb-item-icon" src="assets/items/${i.itemID}.png">`)
+            .map(i => `<img class="sb-item-icon" src="../assets/items/${i.itemID}.png">`)
             .join("") : "";
 
         const chaosScores = chaos?.scores ?? {};
@@ -108,7 +108,7 @@ function renderScoreBoardRows(rows) {
         // --- ルーン（縦並び） ---
         const getRuneIcon = (name) => {
             const icon = runeIconMap?.[name];
-            return icon ? icon : "assets/runes/Unknown.png";
+            return icon ? icon : "../assets/runes/Unknown.png";
         };
 
         const orderRunes = order ? `
@@ -217,13 +217,13 @@ const spellIconsByRawDescription = {
 
 const getSpellIcon = (name, rawDescription) => {
     const icon = spellIconsByRawDescription[rawDescription];
-    if (icon) return `assets/spell/${icon}`;
+    if (icon) return `../assets/spell/${icon}`;
 
     const id = summonerSpellMap?.nameToId?.[name] ?? spellAliases[name];
-    return id ? `assets/spell/${id}.png` : "assets/spell/Unknown.png";
+    return id ? `../assets/spell/${id}.png` : "../assets/spell/Unknown.png";
 };
 
 const getRuneIcon = (name) => {
     const icon = runeIconMap?.[name];
-    return icon ? icon : "assets/runes/Unknown.png";
+    return icon ? icon : "../assets/runes/Unknown.png";
 };

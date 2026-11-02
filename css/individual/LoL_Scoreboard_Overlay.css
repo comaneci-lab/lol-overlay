@@ -1,0 +1,23 @@
+html,
+body,
+#overlay-canvas {
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+}
+
+.scoreboard-widget {
+    position: static;
+    width: 720px;
+}
+
+.scoreboard-scale-frame {
+    width: 720px;
+    height: 180px;
+}
+
+#ScoreBord {
+    position: static;
+    width: 720px;
+    transform: none;
+}

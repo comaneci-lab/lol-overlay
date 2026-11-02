@@ -1,0 +1,13 @@
+html,
+body,
+#overlay-canvas {
+    width: max-content;
+    height: max-content;
+    overflow: visible;
+}
+
+.active-player-cs {
+    position: static;
+    width: max-content;
+    transform: none;
+}

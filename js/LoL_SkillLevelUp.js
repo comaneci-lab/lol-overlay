@@ -37,7 +37,7 @@ function showSkillLevelUpIcon(id, now) {
         notification.expiresAt = now + SKILL_LEVEL_UP_DURATION;
     } else {
         const icon = document.createElement("img");
-        icon.src = `assets/spell/${id}.png`;
+        icon.src = `../assets/spell/${id}.png`;
         icon.alt = id;
         skillLevelUpWidget.appendChild(icon);
         skillLevelUpIcons.set(id, {

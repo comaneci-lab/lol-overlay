@@ -2,10 +2,10 @@ const OBJECT_TIMER_URL = "http://localhost:8888/allgamedata";
 const OBJECT_TIMER_LEAD_TIME = 3 * 60;
 
 const OBJECT_TIMER_DEFINITIONS = [
-    { id: "dragon", eventName: "DragonKill", initialSpawnAt: 5 * 60, respawnTime: 5 * 60, respawnTimeAfterFifthKill: 6 * 60, icon: "assets/icon_dragon.png" },
-    { id: "voidclub", eventName: "HordeKill", initialSpawnAt: 8 * 60, despawnAt: 14 * 60 + 45, respawnTime: null, icon: "assets/icon_voidclub.png" },
-    { id: "herald", eventName: "HeraldKill", initialSpawnAt: 15 * 60, despawnAt: 19 * 60 + 45, respawnTime: null, icon: "assets/icon_herald.png" },
-    { id: "baron", eventName: "BaronKill", initialSpawnAt: 20 * 60, respawnTime: 6 * 60, icon: "assets/icon_baron.png" }
+    { id: "dragon", eventName: "DragonKill", initialSpawnAt: 5 * 60, respawnTime: 5 * 60, respawnTimeAfterFifthKill: 6 * 60, icon: "../assets/icon_dragon.png" },
+    { id: "voidclub", eventName: "HordeKill", initialSpawnAt: 8 * 60, despawnAt: 14 * 60 + 45, respawnTime: null, icon: "../assets/icon_voidclub.png" },
+    { id: "herald", eventName: "HeraldKill", initialSpawnAt: 15 * 60, despawnAt: 19 * 60 + 45, respawnTime: null, icon: "../assets/icon_herald.png" },
+    { id: "baron", eventName: "BaronKill", initialSpawnAt: 20 * 60, respawnTime: 6 * 60, icon: "../assets/icon_baron.png" }
 ];
 
 const objectTimerWidget = document.createElement("div");
@@ -42,6 +42,7 @@ let objectTimerLastKillAt = {};
 let objectTimerKillCounts = {};
 let objectTimerKilledOnce = new Set();
 let objectTimerSeenEvents = new Set();
+let lastObjectTimerWasSpectator = null;
 
 function resetObjectTimerState() {
     objectTimerNextSpawnAt = Object.fromEntries(
@@ -95,6 +96,58 @@ function processObjectTimerEvents(events, gameTime) {
     }
 }
 
+function processSpectatorObjectiveData(spectatorData) {
+    const teams = spectatorData?.teams;
+    const objectives = spectatorData?.objectives;
+    if (!teams?.ORDER || !teams?.CHAOS || !objectives) {
+        throw new Error("観戦モードのオブジェクトデータがありません。");
+    }
+
+    const getTotalKills = field => {
+        const orderCount = Number(teams.ORDER[field]);
+        const chaosCount = Number(teams.CHAOS[field]);
+        if (!Number.isInteger(orderCount) || orderCount < 0 ||
+            !Number.isInteger(chaosCount) || chaosCount < 0) {
+            throw new Error(`観戦モードの${field}取得数が不正です。`);
+        }
+        return orderCount + chaosCount;
+    };
+
+    const dragonKillCount = getTotalKills("DragonKill");
+    const baronKillCount = getTotalKills("BaronKill");
+    objectTimerKillCounts = {
+        dragon: dragonKillCount,
+        baron: baronKillCount
+    };
+    objectTimerNextSpawnAt = Object.fromEntries(
+        OBJECT_TIMER_DEFINITIONS.map(object => [object.id, object.initialSpawnAt])
+    );
+    objectTimerLastKillAt = {};
+    objectTimerKilledOnce = new Set();
+    objectTimerSeenEvents = new Set();
+
+    for (const [id, killCount] of [["dragon", dragonKillCount], ["baron", baronKillCount]]) {
+        if (killCount === 0) continue;
+
+        const lastKillAtValue = objectives[id]?.lastKillAt;
+        if (lastKillAtValue == null) continue;
+        const lastKillAt = Number(lastKillAtValue);
+        if (!Number.isFinite(lastKillAt) || lastKillAt < 0) {
+            throw new Error(`観戦モードの${id}最終撃破時刻が不正です。`);
+        }
+
+        const object = OBJECT_TIMER_DEFINITIONS.find(candidate => candidate.id === id);
+        const respawnTime = object.respawnTimeAfterFifthKill && killCount >= 5
+            ? object.respawnTimeAfterFifthKill
+            : object.respawnTime;
+        objectTimerLastKillAt[id] = lastKillAt;
+        objectTimerNextSpawnAt[id] = lastKillAt + respawnTime;
+    }
+
+    if (getTotalKills("HordeKill") > 0) objectTimerKilledOnce.add("voidclub");
+    if (getTotalKills("HeraldKill") > 0) objectTimerKilledOnce.add("herald");
+}
+
 function renderObjectTimers(gameTime) {
     for (const object of OBJECT_TIMER_DEFINITIONS) {
         const { card, time } = objectTimerCards.get(object.id);
@@ -127,8 +180,13 @@ async function updateObjectTimers() {
         const gameDataResponse = await response.json();
         const data = gameDataResponse?.data;
         const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        const gameMode = String(data?.gameData?.gameMode ?? "").toUpperCase();
+        const isSpectatorMode = data?.isSpectatorMode === true ||
+            gameMode === "SPECTATOR" || !data?.activePlayer;
+        window.isSpectatorMode = isSpectatorMode;
         if (gameDataResponse?.ok !== true || !Array.isArray(data?.allPlayers) ||
-            !Number.isFinite(gameTime) || !Array.isArray(data?.events?.Events)) {
+            !Number.isFinite(gameTime) ||
+            (!isSpectatorMode && !Array.isArray(data?.events?.Events))) {
             objectTimerWidget.hidden = true;
             if (!objectTimerInvalidDataLogged) {
                 console.error("invalid game data received for object timers", gameDataResponse);
@@ -137,22 +195,27 @@ async function updateObjectTimers() {
             return;
         }
 
-        window.isSpectatorMode = isSpectatorGameData(data);
-        if (window.isSpectatorMode) {
+        if (isSpectatorMode && !data?.spectatorData) {
             objectTimerWidget.hidden = true;
+            objectTimerInvalidDataLogged = false;
             return;
         }
 
         objectTimerInvalidDataLogged = false;
-        if (!objectTimerGameStarted || (
+        if (lastObjectTimerWasSpectator !== isSpectatorMode || !objectTimerGameStarted || (
             lastObjectTimerGameTime !== null && gameTime < lastObjectTimerGameTime - 5
         )) {
             resetObjectTimerState();
             objectTimerGameStarted = true;
         }
 
+        lastObjectTimerWasSpectator = isSpectatorMode;
         lastObjectTimerGameTime = gameTime;
-        processObjectTimerEvents(data.events.Events, gameTime);
+        if (isSpectatorMode) {
+            processSpectatorObjectiveData(data.spectatorData);
+        } else {
+            processObjectTimerEvents(data.events.Events, gameTime);
+        }
         renderObjectTimers(gameTime);
         objectTimerWidget.hidden = false;
     } catch (error) {

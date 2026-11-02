@@ -31,7 +31,7 @@ function createRoleGoldDiffChampion(player, sideClass) {
 
     const icon = document.createElement("img");
     icon.className = "gd-champ-icon";
-    icon.src = `assets/champion/${player.championIcon || "Unknown"}.png`;
+    icon.src = `../assets/champion/${player.championIcon || "Unknown"}.png`;
     icon.alt = player.championName || player.championIcon || "Champion";
     side.appendChild(icon);
 

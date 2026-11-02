@@ -53,6 +53,8 @@ LoLAPIGet.exe を実行してください。
 このプログラムは League of Legends の Live Client Data API にJavaScriptからアクセスするためのローカルプロキシです。
 ※JavaScriptからアクセスする場合、CORS（Cross-Origin Resource Sharing）制約によりエラーとなるため、Pythonでローカルプロキシを作成することで回避
 
+観戦モードでは、Live Client Data APIで取得できないオブジェクト情報を画面から入力してオーバーレイに反映できます。詳しくは[観戦モードの使い方](docs/観戦モード.md)を参照してください。
+
 配布時の `settings.ini` は `ja_JP` に設定されています。初回起動前に、League of Legends クライアントの言語設定を確認し、異なる場合は後述の手順で `settings.ini` を変更してください。
 
 起動すると、`LoLAPIGet.exe` と同じ場所に `json` フォルダーを作成します。JSONファイルは実行ファイルには同梱されず、オーバーレイからデータを要求されたときにData Dragonから取得し、`json\<言語コード>\` に保存します。
@@ -109,63 +111,30 @@ OBS Studio を起動します。
 
 「ソース」→「追加」→「ブラウザ」を選択します。
 
-「ローカルファイル」を有効にし、以下のファイルを指定してください。
+「ローカルファイル」を有効にし、表示したい機能に対応する個別HTMLを指定してください。たとえば、トップバーとオブジェクトタイマーを別々に表示する場合は、それぞれ次のファイルを選びます。
 
 ```text
-LoL_Overlay_Landscape.html
+html\LoL_TopBar_Overlay.html
+html\LoL_ObjectTimer_Overlay.html
 ```
 
-例:
+スコアボードを表示する場合は、次の個別HTMLを追加します。
 
 ```text
-C:\LoLOverlay\LoL_Overlay_Landscape.html
+C:\LoLOverlay\html\LoL_Scoreboard_Overlay.html
 ```
 
-詳しい手順は[OBS設定手順](docs/OBS設定手順.md)を参照してください。
+個別HTMLは機能ごとに分かれているため、必要なものをそれぞれブラウザソースとして追加してください。HTMLと推奨サイズ、OBSの設定手順は[OBS設定手順](docs/OBS設定手順.md)を参照してください。オーバーレイHTMLは `html/`、全ページ共通のCSSは `css/LoLOverlay.css`、ページ固有のCSSは `css/individual/` にあります。
 
-### 5. 表示サイズと位置を初期設定する
+複数の表示をまとめた全体オーバーレイも利用できます。設定方法が個別HTMLより複雑なため、初めて使う場合は個別HTMLをおすすめします。横型・縦型の全体オーバーレイの設定は[横型・縦型オーバーレイの設定](docs/横型・縦型オーバーレイ.md)を参照してください。
 
-オーバーレイのキャンバスサイズは、OBSで使う映像の向き・解像度に合わせてください。初期設定は横型が **1920×1080**、縦型が **1080×1920** です。横型を使う場合は `LoL_Overlay_Landscape.html`、縦型を使う場合は `LoL_Overlay_Portrait.html` を編集します。
-
-#### OBSのサイズを合わせる
-
-1. OBSの「設定」→「映像」で、基本（キャンバス）解像度を配信・録画で使うサイズに設定します。
-2. 「ソース」のブラウザーソースのプロパティを開き、「幅」「高さ」をその解像度に合わせます。
-3. HTMLのキャンバスサイズも同じ幅・高さにします。HTMLをテキストエディターで開き、`<head>` 内の `<style>` にある `:root` に、次の2項目を追加または変更します。
-
-```css
---canvas-width: 1920px;
---canvas-height: 1080px;
-```
-
-たとえば縦型の標準サイズにする場合は、幅を `1080px`、高さを `1920px` にします。横型・縦型の初期サイズをそのまま使う場合は、HTMLのキャンバスサイズを変更する必要はありません。映像サイズを変更したときは、OBSの基本（キャンバス）解像度、ブラウザーソースの幅・高さ、HTMLのキャンバスサイズの3つを揃えてください。
-
-#### 各表示の位置・大きさを調整する
-
-同じ `<style>` 内の `:root` にある値を変更すると、ウィジェットごとの位置や拡大率を調整できます。
-
-| 設定項目 | 調整できる内容 |
-| --- | --- |
-| `--topbar-top`、`--topbar-left`、`--topbar-scale` | トップバーの上下・左右位置と拡大率 |
-| `--gold-chart-left`、`--gold-chart-bottom`、`--gold-chart-scale` | ゴールドグラフの左右・下位置と拡大率 |
-| `--scoreboard-left`、`--scoreboard-bottom`、`--scoreboard-scale` | スコアボードの左右・下位置と拡大率 |
-| `--role-gold-diff-top`、`--role-gold-diff-right`、`--role-gold-diff-scale` | 横型のレーン別ゴールド差の上・右位置と拡大率 |
-| `--active-player-cs-top`、`--active-player-cs-right`、`--active-player-cs-scale` | 横型の分間CSの上・右位置と拡大率 |
-| `--object-timer-top`、`--object-timer-right`、`--object-timer-scale` | オブジェクトタイマーの上・右位置と拡大率 |
-
-位置は `px` 単位で調整します。拡大率は単位なしで、`1` が標準、`1.2` が1.2倍、`0.8` が0.8倍です。スコアボードの横幅を変える場合は `--scoreboard-width` と `--scoreboard-display-width` も調整してください。
-
-横型と縦型は別のHTMLファイルなので、両方使う場合はそれぞれを編集します。調整後はファイルを保存し、OBSでブラウザーソースを再読み込みして表示位置や見切れがないか確認してください。
-
-### 6. ゲームを開始する
+### 5. ゲームを開始する
 
 試合開始後、自動的にオーバーレイが更新されます。
 
-### 7. 表示機能のカスタマイズ
+### 6. 表示機能のカスタマイズ
 
-LoL_Overlay_Landscape.htmlの表示・非表示を変更したい場合は以下を参考にしてください。
-
-- [表示機能の切り替え方法](docs/個別JSの追加と削除.md)
+横型・縦型の個別機能の表示・非表示を切り替える方法は、[全体オーバーレイの設定ガイド](docs/横型・縦型オーバーレイ.md)を参照してください。
 
 ---
 
@@ -173,7 +142,7 @@ LoL_Overlay_Landscape.htmlの表示・非表示を変更したい場合は以下
 
 ### オーバーレイを終了する
 
-LoLAPIGet.exe のウィンドウを閉じてください。
+観戦データ入力画面を閉じてください。これによりLoLAPIGet.exeとローカルプロキシが終了します。
 
 またはコンソールウィンドウで
 
@@ -262,6 +231,6 @@ Python と PyInstaller をインストールした Windows 環境で、プロジ
 dist\LoLAPIGet.exe
 ```
 
-に単一ファイル形式の実行ファイルが生成されます。実行時に `_internal` フォルダは不要です。HTML、CSS、JavaScript、画像などのオーバーレイファイルは、これまでどおり実行ファイルとは別に配置してください。
+に単一ファイル形式の実行ファイルが生成されます。観戦データGUIで使うドラゴン画像6枚は実行ファイルに含まれるため、GUI表示のために `assets` フォルダーを実行ファイルの隣へ置く必要はありません。実行時に `_internal` フォルダも不要です。HTMLオーバーレイが使う画像やHTML、CSS、JavaScriptは、これまでどおり実行ファイルとは別に配置してください。
 
 JSONデータは実行ファイルに含まれません。実行時に、`settings.ini` で指定された言語のデータを必要に応じてData Dragonから取得します。
