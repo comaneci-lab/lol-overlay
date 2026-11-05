@@ -214,7 +214,7 @@ async function refreshTopbar() {
     try {
         let gameTime;
         try {
-            const gameDataResp = await fetch("http://localhost:8888/allgamedata", { cache: "no-store" });
+            const gameDataResp = await fetch("/allgamedata", { cache: "no-store" });
             if (!gameDataResp.ok) throw new Error(`status ${gameDataResp.status}`);
             const gameDataResponse = await gameDataResp.json();
             if (gameDataResponse?.ok !== true || !Array.isArray(gameDataResponse.data?.allPlayers)) {

@@ -1,4 +1,4 @@
-const SKILL_LEVEL_UP_URL = "http://localhost:8888/allgamedata";
+const SKILL_LEVEL_UP_URL = "/allgamedata";
 const SKILL_LEVEL_UP_DURATION = 3000;
 
 const skillLevelUpWidget = document.createElement("div");

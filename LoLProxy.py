@@ -1,5 +1,5 @@
 from copy import deepcopy
-from flask import Flask, jsonify
+from flask import Flask, jsonify, send_from_directory
 import configparser
 import json
 import os
@@ -761,10 +761,24 @@ def serve_static_json(json_key):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-@app.after_request
-def add_cors_headers(response):
-    response.headers["Access-Control-Allow-Origin"] = "*"
-    return response
+@app.route("/html/<path:filename>")
+def overlay_html(filename):
+    return send_from_directory(os.path.join(APP_DIR, "html"), filename)
+
+
+@app.route("/css/<path:filename>")
+def overlay_css(filename):
+    return send_from_directory(os.path.join(APP_DIR, "css"), filename)
+
+
+@app.route("/js/<path:filename>")
+def overlay_js(filename):
+    return send_from_directory(os.path.join(APP_DIR, "js"), filename)
+
+
+@app.route("/assets/<path:filename>")
+def overlay_asset(filename):
+    return send_from_directory(os.path.join(APP_DIR, "assets"), filename)
 
 
 @app.route("/allgamedata")

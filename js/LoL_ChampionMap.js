@@ -109,7 +109,7 @@ function getPositionOnRoute(route, gameTime, role, playerKey) {
 }
 
 async function loadChampionIcons() {
-    const response = await fetch("http://localhost:8888/champions", { cache: "no-store" });
+    const response = await fetch("/champions", { cache: "no-store" });
     if (!response.ok) throw new Error(`champion list status ${response.status}`);
     const result = await response.json();
     const champions = result?.data?.data;
@@ -189,7 +189,7 @@ async function refreshChampionOverlay() {
     refreshInProgress = true;
 
     try {
-        const response = await fetch("http://localhost:8888/allgamedata", { cache: "no-store" });
+        const response = await fetch("/allgamedata", { cache: "no-store" });
         if (!response.ok) throw new Error(`game data status ${response.status}`);
         const result = await response.json();
         const data = result?.data;

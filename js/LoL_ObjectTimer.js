@@ -1,4 +1,4 @@
-const OBJECT_TIMER_URL = "http://localhost:8888/allgamedata";
+const OBJECT_TIMER_URL = "/allgamedata";
 const OBJECT_TIMER_LEAD_TIME = 3 * 60;
 
 const OBJECT_TIMER_DEFINITIONS = [

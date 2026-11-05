@@ -1,4 +1,4 @@
-const ACTIVE_PLAYER_CS_URL = "http://localhost:8888/allgamedata";
+const ACTIVE_PLAYER_CS_URL = "/allgamedata";
 const activePlayerCsElement = document.getElementById("active-player-cs");
 
 function getActivePlayerCs(playerData) {
