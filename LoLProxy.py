@@ -773,7 +773,9 @@ def overlay_css(filename):
 
 @app.route("/js/<path:filename>")
 def overlay_js(filename):
-    return send_from_directory(os.path.join(APP_DIR, "js"), filename)
+    response = send_from_directory(os.path.join(APP_DIR, "js"), filename)
+    response.headers["Cache-Control"] = "no-store"
+    return response
 
 
 @app.route("/assets/<path:filename>")
