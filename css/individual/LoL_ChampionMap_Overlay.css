@@ -27,6 +27,7 @@ body {
 
 .champion-icon {
     position: absolute;
+    z-index: 3;
     width: var(--champion-icon-size);
     height: var(--champion-icon-size);
     border: 2px solid #42a5ff;
@@ -40,6 +41,42 @@ body {
 
 .champion-icon.chaos {
     border-color: #ff5967;
+}
+
+.tower-icon,
+.minion-icon {
+    position: absolute;
+    pointer-events: none;
+    transform: translate(-50%, -50%);
+}
+
+.tower-icon {
+    z-index: 2;
+    width: 18px;
+    height: 18px;
+    object-fit: contain;
+    filter: drop-shadow(0 1px 3px #000);
+}
+
+.minion-icon {
+    z-index: 1;
+    width: 6px;
+    height: 6px;
+    border: 1px solid #fff;
+    border-radius: 50%;
+    background: #42a5ff;
+    box-shadow: 0 1px 3px #000;
+    transition: left 900ms linear, top 900ms linear;
+}
+
+.minion-icon.chaos {
+    background: #ff5967;
+}
+
+.minion-icon.cannon {
+    width: 11px;
+    height: 11px;
+    border-width: 2px;
 }
 
 .champion-icon[hidden] {

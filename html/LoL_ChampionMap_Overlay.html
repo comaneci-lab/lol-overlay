@@ -8,6 +8,10 @@
 </head>
 <body>
     <div id="champion-map-markers" aria-label="Champion icons"></div>
-    <script src="../js/LoL_ChampionMap.js"></script>
+    <script>
+        const championMapScript = document.createElement("script");
+        championMapScript.src = `../js/LoL_ChampionMap.js?v=${Date.now()}`;
+        document.body.appendChild(championMapScript);
+    </script>
 </body>
 </html>

@@ -13,6 +13,7 @@ League of Legends の Live Client Data API を利用したOBS向けオーバー�
 - 分間CS表示
 - ゴールドチャート表示
 - オブジェクトタイマー表示
+- チャンピオンマップ（ミニオン・タワー表示）
 - スキルレベルアップ時のアイコン表示
 - Data Dragon画像対応
 - OBSブラウザソース対応
