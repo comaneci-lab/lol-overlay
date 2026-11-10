@@ -124,6 +124,12 @@ http://127.0.0.1:8888/html/LoL_ObjectTimer_Overlay.html
 http://127.0.0.1:8888/html/LoL_Scoreboard_Overlay.html
 ```
 
+ゲーム開始時にロールごとのスプラッシュアートを表示する場合は、次の個別HTMLを追加します。
+
+```text
+http://127.0.0.1:8888/html/LoL_GameStartSplash_Overlay.html
+```
+
 個別HTMLは機能ごとに分かれているため、必要なものをそれぞれブラウザソースとして追加してください。HTMLと推奨サイズ、OBSの設定手順は[OBS設定手順](docs/OBS設定手順.md)を参照してください。オーバーレイHTMLは `html/`、全ページ共通のCSSは `css/LoLOverlay.css`、ページ固有のCSSは `css/individual/`、JavaScriptは `js/` にあります。これらのファイルを編集した後は、ブラウザソースを更新すると変更が反映されます。Chromeで確認するときも、HTMLファイルを直接開かず、同じ `http://127.0.0.1:8888/html/...` のURLを使用してください。
 
 複数の表示をまとめた全体オーバーレイも利用できます。設定方法が個別HTMLより複雑なため、初めて使う場合は個別HTMLをおすすめします。横型・縦型の全体オーバーレイの設定は[横型・縦型オーバーレイの設定](docs/横型・縦型オーバーレイ.md)を参照してください。

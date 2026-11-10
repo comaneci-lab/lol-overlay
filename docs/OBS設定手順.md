@@ -37,6 +37,7 @@
 | `html/LoL_SkillLevelUp_Overlay.html` | 固定値なし | 固定値なし | スキルレベルアップ時に表示されるアイコンに合わせて調整 |
 | `html/LoL_ChampionMap_Overlay.html` | 300 | 300 | ミニマップ上に配置する全画面オーバーレイ |
 | `html/LoL_CSPerMinute_Overlay.html` | 固定値なし | 固定値なし | 内容に合わせたサイズ。OBSプレビューを見て調整 |
+| `html/LoL_GameStartSplash_Overlay.html` | 1920 | 1080 | 試合開始時に両チームのスプラッシュアートを順番に表示 |
 
 「固定値なし」のHTMLは、表示内容や調整により必要な範囲が変わります。ブラウザソースの幅・高さを設定した後、OBSプレビューで表示が切れないサイズに調整してください。
 
