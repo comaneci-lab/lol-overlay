@@ -1,0 +1,88 @@
+name: Publish overlay updater
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "html/**"
+      - "css/**"
+      - "js/**"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: github-pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Build update site
+        env:
+          UPDATE_VERSION: ${{ github.sha }}
+        run: |
+          mkdir -p _site
+          cp -R html css js _site/
+          touch _site/.nojekyll
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+
+          site_root = "_site"
+          files = []
+          for directory in ("html", "css", "js"):
+              for current_root, subdirectories, filenames in os.walk(
+                  os.path.join(site_root, directory)
+              ):
+                  subdirectories.sort()
+                  for filename in sorted(filenames):
+                      full_path = os.path.join(current_root, filename)
+                      relative_path = os.path.relpath(full_path, site_root).replace(
+                          os.sep, "/"
+                      )
+                      with open(full_path, "rb") as source_file:
+                          contents = source_file.read()
+                      files.append({
+                          "path": relative_path,
+                          "size": len(contents),
+                          "sha256": hashlib.sha256(contents).hexdigest(),
+                      })
+
+          manifest = {
+              "schema": 1,
+              "version": os.environ["UPDATE_VERSION"],
+              "files": files,
+          }
+          with open(
+              os.path.join(site_root, "update-manifest.json"),
+              "w",
+              encoding="utf-8",
+          ) as manifest_file:
+              json.dump(manifest, manifest_file, ensure_ascii=False, indent=2)
+          PY
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+      - name: Deploy to Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -61,6 +61,12 @@ LoLAPIGet.exe を実行してください。
 
 起動すると、`LoLAPIGet.exe` と同じ場所に `json` フォルダーを作成します。JSONファイルは実行ファイルには同梱されず、オーバーレイからデータを要求されたときにData Dragonから取得し、`json\<言語コード>\` に保存します。個別チャンピオンのJSONは `/champion/<チャンピオン名>` で取得でき、`json\<言語コード>\champion\<チャンピオン名>.json` に保存されます（例: `/champion/Aatrox`）。
 
+#### オーバーレイファイルの最新化
+
+観戦データウィンドウの「オーバーレイを最新化」から、GitHub Pagesで公開されたHTML・CSS・JavaScriptを取得できます。更新後は、変更を反映するためOBSのブラウザソースを再読み込みしてください。この操作では実行ファイル、assets、JSONは更新されません。実行ファイルはGitHub Releasesからダウンロードしてください。
+
+GitHub Pagesへの公開は、`main` ブランチの `html/`、`css/`、`js/` の変更時にGitHub Actionsで行います。リポジトリの「Settings」→「Pages」で、公開元を「GitHub Actions」に設定してください。
+
 #### 使用言語の設定
 
 ゲームクライアントの言語と `settings.ini` の `language` を一致させてください。`settings.ini` は `LoLAPIGet.exe` と同じフォルダーにあります。テキストエディターで開き、言語コードを変更して保存します。
