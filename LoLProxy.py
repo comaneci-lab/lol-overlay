@@ -1,14 +1,18 @@
 from copy import deepcopy
 from flask import Flask, jsonify, send_from_directory
 import configparser
+import hashlib
 import json
 import os
 import re
 import requests
+import shutil
 import sys
+import tempfile
 import threading
 import tkinter as tk
 from tkinter import messagebox, ttk
+from urllib.parse import quote
 import urllib3
 from werkzeug.serving import make_server
 
@@ -26,6 +30,13 @@ SPECTATOR_DATA_PATH = os.path.join(JSON_DIR, "spectator_data.json")
 LEGACY_SPECTATOR_DATA_PATH = os.path.join(APP_DIR, "spectator_data.json")
 DEFAULT_LANGUAGE = "ja_JP"
 DATA_DRAGON_VERSION = "16.22.1"
+OVERLAY_UPDATE_BASE_URL = "https://comaneci-lab.github.io/lol-overlay"
+OVERLAY_UPDATE_MANIFEST_URL = f"{OVERLAY_UPDATE_BASE_URL}/update-manifest.json"
+OVERLAY_UPDATE_ROOTS = {"html": ".html", "css": ".css", "js": ".js"}
+OVERLAY_UPDATE_MAX_FILES = 500
+OVERLAY_UPDATE_MAX_FILE_SIZE = 5 * 1024 * 1024
+OVERLAY_UPDATE_MAX_TOTAL_SIZE = 50 * 1024 * 1024
+OVERLAY_UPDATE_MAX_MANIFEST_SIZE = 1024 * 1024
 TEAMS = ("ORDER", "CHAOS")
 OBJECTIVE_FIELDS = {
     "HordeKill": "ヴォイドグラブ",
@@ -62,6 +73,208 @@ spectator_data_revision = 0
 current_game_time = None
 last_live_game_time = None
 spectator_mode_enabled = True
+
+
+class OverlayUpdateError(ValueError):
+    pass
+
+
+def validate_overlay_update_manifest(manifest):
+    if (
+        not isinstance(manifest, dict)
+        or type(manifest.get("schema")) is not int
+        or manifest["schema"] != 1
+    ):
+        raise OverlayUpdateError("更新マニフェストの形式またはバージョンが不正です。")
+
+    version = manifest.get("version")
+    if not isinstance(version, str) or not re.fullmatch(r"[0-9a-f]{40}", version):
+        raise OverlayUpdateError("更新マニフェストのバージョンが不正です。")
+
+    files = manifest.get("files")
+    if not isinstance(files, list) or not files or len(files) > OVERLAY_UPDATE_MAX_FILES:
+        raise OverlayUpdateError("更新マニフェストのファイル一覧が不正です。")
+
+    validated_files = []
+    seen_paths = set()
+    total_size = 0
+    for file_info in files:
+        if not isinstance(file_info, dict):
+            raise OverlayUpdateError("更新マニフェストに不正なファイル情報があります。")
+
+        relative_path = file_info.get("path")
+        if not isinstance(relative_path, str) or "\\" in relative_path:
+            raise OverlayUpdateError("更新対象のパスが不正です。")
+        path_parts = relative_path.split("/")
+        if (
+            len(path_parts) < 2
+            or path_parts[0] not in OVERLAY_UPDATE_ROOTS
+            or any(
+                part in ("", ".", "..")
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+", part)
+                for part in path_parts
+            )
+            or os.path.splitext(path_parts[-1])[1].lower()
+            != OVERLAY_UPDATE_ROOTS[path_parts[0]]
+        ):
+            raise OverlayUpdateError(f"更新対象外のファイルです: {relative_path}")
+        if relative_path in seen_paths:
+            raise OverlayUpdateError(f"更新対象が重複しています: {relative_path}")
+        seen_paths.add(relative_path)
+
+        size = file_info.get("size")
+        if type(size) is not int or size < 0 or size > OVERLAY_UPDATE_MAX_FILE_SIZE:
+            raise OverlayUpdateError(f"ファイルサイズが不正です: {relative_path}")
+        total_size += size
+        if total_size > OVERLAY_UPDATE_MAX_TOTAL_SIZE:
+            raise OverlayUpdateError("更新ファイルの合計サイズが上限を超えています。")
+
+        digest = file_info.get("sha256")
+        if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", digest):
+            raise OverlayUpdateError(f"ファイルのハッシュ値が不正です: {relative_path}")
+
+        validated_files.append({
+            "path": relative_path,
+            "size": size,
+            "sha256": digest.lower(),
+        })
+
+    return version, validated_files
+
+
+def hash_overlay_update_file(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as source_file:
+        for chunk in iter(lambda: source_file.read(64 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def get_overlay_update_target_path(install_root, relative_path):
+    root_path = os.path.abspath(install_root)
+    target_path = os.path.abspath(
+        os.path.join(root_path, *relative_path.split("/"))
+    )
+    if os.path.commonpath((root_path, target_path)) != root_path:
+        raise OverlayUpdateError(f"更新対象のパスが不正です: {relative_path}")
+
+    current_path = root_path
+    for part in relative_path.split("/"):
+        current_path = os.path.join(current_path, part)
+        if os.path.islink(current_path):
+            raise OverlayUpdateError(f"更新先にシンボリックリンクがあります: {relative_path}")
+    return target_path
+
+
+def install_overlay_update_files(staging_directory, files):
+    for file_info in files:
+        target_path = get_overlay_update_target_path(APP_DIR, file_info["path"])
+        if os.path.exists(target_path) and not os.path.isfile(target_path):
+            raise OverlayUpdateError(f"更新先がファイルではありません: {file_info['path']}")
+
+    backup_directory = os.path.join(staging_directory, "backup")
+    changed_targets = []
+    try:
+        for file_info in files:
+            relative_path = file_info["path"]
+            path_parts = relative_path.split("/")
+            staged_path = os.path.join(staging_directory, "download", *path_parts)
+            target_path = get_overlay_update_target_path(APP_DIR, relative_path)
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+
+            backup_path = None
+            if os.path.isfile(target_path):
+                backup_path = os.path.join(backup_directory, *path_parts)
+                os.makedirs(os.path.dirname(backup_path), exist_ok=True)
+                shutil.copy2(target_path, backup_path)
+
+            changed_targets.append((target_path, backup_path))
+            os.replace(staged_path, target_path)
+    except OSError as error:
+        rollback_errors = []
+        for target_path, backup_path in reversed(changed_targets):
+            try:
+                if backup_path:
+                    os.replace(backup_path, target_path)
+                elif os.path.exists(target_path):
+                    os.remove(target_path)
+            except OSError as rollback_error:
+                rollback_errors.append(str(rollback_error))
+
+        details = f"更新ファイルを配置できませんでした: {error}"
+        if rollback_errors:
+            details += f" 元のファイルへの復元にも失敗しました: {'; '.join(rollback_errors)}"
+        raise OverlayUpdateError(details) from error
+
+
+def update_overlay_files(progress_callback=None):
+    with requests.get(
+        OVERLAY_UPDATE_MANIFEST_URL,
+        headers={"Cache-Control": "no-cache"},
+        timeout=(5, 20),
+    ) as response:
+        if response.status_code == 404:
+            raise OverlayUpdateError(
+                "GitHub Pagesの更新マニフェストが見つかりません。"
+                "Pagesの有効化とデプロイ状況を確認してください。"
+            )
+        response.raise_for_status()
+        if len(response.content) > OVERLAY_UPDATE_MAX_MANIFEST_SIZE:
+            raise OverlayUpdateError("更新マニフェストが大きすぎます。")
+        try:
+            manifest = response.json()
+        except ValueError as error:
+            raise OverlayUpdateError("更新マニフェストをJSONとして読み込めません。") from error
+
+    version, files = validate_overlay_update_manifest(manifest)
+    files_to_update = []
+    for file_info in files:
+        target_path = get_overlay_update_target_path(APP_DIR, file_info["path"])
+        if not os.path.isfile(target_path):
+            files_to_update.append(file_info)
+            continue
+        if hash_overlay_update_file(target_path) != file_info["sha256"]:
+            files_to_update.append(file_info)
+
+    if not files_to_update:
+        return {"version": version, "updated_files": 0}
+
+    with tempfile.TemporaryDirectory(prefix=".overlay-update-", dir=APP_DIR) as staging_directory:
+        for index, file_info in enumerate(files_to_update, start=1):
+            relative_path = file_info["path"]
+            if progress_callback:
+                progress_callback(f"更新ファイルを取得中 ({index}/{len(files_to_update)}): {relative_path}")
+
+            download_url = (
+                f"{OVERLAY_UPDATE_BASE_URL}/"
+                f"{quote(relative_path, safe='/')}?v={version}"
+            )
+            with requests.get(download_url, stream=True, timeout=(5, 30)) as response:
+                if response.status_code == 404:
+                    raise OverlayUpdateError(f"更新ファイルが見つかりません: {relative_path}")
+                response.raise_for_status()
+                staged_path = os.path.join(staging_directory, "download", *relative_path.split("/"))
+                os.makedirs(os.path.dirname(staged_path), exist_ok=True)
+                file_digest = hashlib.sha256()
+                downloaded_size = 0
+                with open(staged_path, "wb") as staged_file:
+                    for chunk in response.iter_content(chunk_size=64 * 1024):
+                        if not chunk:
+                            continue
+                        downloaded_size += len(chunk)
+                        if downloaded_size > file_info["size"]:
+                            raise OverlayUpdateError(f"ファイルサイズが一致しません: {relative_path}")
+                        file_digest.update(chunk)
+                        staged_file.write(chunk)
+
+            if downloaded_size != file_info["size"]:
+                raise OverlayUpdateError(f"ファイルサイズが一致しません: {relative_path}")
+            if file_digest.hexdigest() != file_info["sha256"]:
+                raise OverlayUpdateError(f"ファイルの検証に失敗しました: {relative_path}")
+
+        install_overlay_update_files(staging_directory, files_to_update)
+
+    return {"version": version, "updated_files": len(files_to_update)}
 
 
 def default_spectator_data():
@@ -267,6 +480,20 @@ class SpectatorDataEditor:
         if not self.spectator_mode_var.get():
             self.editor_panel.grid_remove()
 
+        self.overlay_update_in_progress = False
+        self.overlay_update_status = tk.StringVar(value="")
+        update_panel = ttk.Frame(content)
+        update_panel.grid(row=3, column=0, columnspan=3, sticky="ew", pady=(8, 0))
+        self.overlay_update_button = ttk.Button(
+            update_panel,
+            text="オーバーレイを最新化",
+            command=self.start_overlay_update,
+        )
+        self.overlay_update_button.grid(row=0, column=0, sticky="w")
+        ttk.Label(update_panel, textvariable=self.overlay_update_status).grid(
+            row=0, column=1, sticky="w", padx=(8, 0)
+        )
+
         objective_icons = {
             "HordeKill": "icon_voidclub.png",
             "HeraldKill": "icon_herald.png",
@@ -396,6 +623,54 @@ class SpectatorDataEditor:
         self.load_form(get_spectator_data())
         self.set_editor_inputs_enabled(False)
         self.root.after(100, self.refresh_live_api)
+
+    def start_overlay_update(self):
+        if self.overlay_update_in_progress:
+            return
+        if not messagebox.askyesno(
+            "オーバーレイの最新化",
+            "GitHub PagesからHTML・CSS・JavaScriptを取得し、既存ファイルを上書きします。"
+            "実行ファイル、assets、JSONは更新しません。続行しますか？",
+            parent=self.root,
+        ):
+            return
+
+        self.overlay_update_in_progress = True
+        self.overlay_update_button.state(["disabled"])
+        self.overlay_update_status.set("更新情報を確認しています...")
+        threading.Thread(target=self.run_overlay_update, daemon=True).start()
+
+    def run_overlay_update(self):
+        def report_progress(message):
+            self.root.after(0, self.overlay_update_status.set, message)
+
+        try:
+            result = update_overlay_files(report_progress)
+        except (OverlayUpdateError, requests.RequestException, OSError) as error:
+            self.root.after(0, self.finish_overlay_update, None, error)
+            return
+        self.root.after(0, self.finish_overlay_update, result, None)
+
+    def finish_overlay_update(self, result, error):
+        self.overlay_update_in_progress = False
+        self.overlay_update_button.state(["!disabled"])
+        if error is not None:
+            self.overlay_update_status.set("更新に失敗しました")
+            messagebox.showerror("更新エラー", str(error), parent=self.root)
+            return
+
+        version = result["version"][:7]
+        updated_files = result["updated_files"]
+        if updated_files == 0:
+            self.overlay_update_status.set(f"最新です ({version})")
+            return
+
+        self.overlay_update_status.set(f"更新完了: {updated_files} ファイル ({version})")
+        messagebox.showinfo(
+            "更新完了",
+            "オーバーレイを更新しました。変更を反映するにはOBSのブラウザソースを再読み込みしてください。",
+            parent=self.root,
+        )
 
     def set_editor_inputs_enabled(self, enabled):
         def set_widget_state(widget):
