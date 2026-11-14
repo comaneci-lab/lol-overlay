@@ -3,6 +3,7 @@ from flask import Flask, jsonify, send_from_directory
 import configparser
 import json
 import os
+import re
 import requests
 import sys
 import threading
@@ -24,7 +25,7 @@ CONFIG_PATH = os.path.join(APP_DIR, "settings.ini")
 SPECTATOR_DATA_PATH = os.path.join(JSON_DIR, "spectator_data.json")
 LEGACY_SPECTATOR_DATA_PATH = os.path.join(APP_DIR, "spectator_data.json")
 DEFAULT_LANGUAGE = "ja_JP"
-DATA_DRAGON_VERSION = "16.4.1"
+DATA_DRAGON_VERSION = "16.22.1"
 TEAMS = ("ORDER", "CHAOS")
 OBJECTIVE_FIELDS = {
     "HordeKill": "ヴォイドグラブ",
@@ -761,6 +762,47 @@ def serve_static_json(json_key):
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
+def serve_champion_json(champion_name):
+    if not re.fullmatch(r"[A-Za-z0-9]+", champion_name):
+        return jsonify({"ok": False, "error": "チャンピオン名が不正です。"}), 400
+
+    try:
+        language = get_language_code()
+    except ValueError as error:
+        print(error)
+        return jsonify({"ok": False, "error": str(error)}), 500
+
+    champion_json_dir = os.path.join(JSON_DIR, language, "champion")
+    filename = f"{champion_name}.json"
+    path = os.path.join(champion_json_dir, filename)
+    url = (
+        f"https://ddragon.leagueoflegends.com/cdn/{DATA_DRAGON_VERSION}"
+        f"/data/{language}/champion/{filename}"
+    )
+    os.makedirs(champion_json_dir, exist_ok=True)
+
+    if not os.path.exists(path):
+        try:
+            response = requests.get(url, timeout=2)
+            response.raise_for_status()
+
+            with open(path, "w", encoding="utf-8") as data_file:
+                json.dump(response.json(), data_file, ensure_ascii=False, indent=2)
+        except Exception as error:
+            print(f"{filename} ({language}) のダウンロードに失敗:", error)
+            return jsonify({
+                "ok": False,
+                "error": f"{filename} ({language}) の取得に失敗しました: {error}"
+            }), 500
+
+    try:
+        with open(path, "r", encoding="utf-8") as data_file:
+            data = json.load(data_file)
+        return jsonify({"ok": True, "data": data})
+    except Exception as error:
+        return jsonify({"ok": False, "error": str(error)}), 500
+
+
 @app.route("/html/<path:filename>")
 def overlay_html(filename):
     return send_from_directory(os.path.join(APP_DIR, "html"), filename)
@@ -822,6 +864,11 @@ def items():
 @app.route("/champions")
 def champions():
     return serve_static_json("champions")
+
+
+@app.route("/champion/<champion_name>")
+def champion(champion_name):
+    return serve_champion_json(champion_name)
 
 
 @app.route("/summoner_spells")

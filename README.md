@@ -13,6 +13,7 @@ League of Legends の Live Client Data API を利用したOBS向けオーバー�
 - 分間CS表示
 - ゴールドチャート表示
 - オブジェクトタイマー表示
+- チャンピオン別スキル一覧表示
 - チャンピオンマップ（ミニオン・タワー表示）
 - スキルレベルアップ時のアイコン表示
 - Data Dragon画像対応
@@ -58,7 +59,7 @@ LoLAPIGet.exe を実行してください。
 
 配布時の `settings.ini` は `ja_JP` に設定されています。初回起動前に、League of Legends クライアントの言語設定を確認し、異なる場合は後述の手順で `settings.ini` を変更してください。
 
-起動すると、`LoLAPIGet.exe` と同じ場所に `json` フォルダーを作成します。JSONファイルは実行ファイルには同梱されず、オーバーレイからデータを要求されたときにData Dragonから取得し、`json\<言語コード>\` に保存します。
+起動すると、`LoLAPIGet.exe` と同じ場所に `json` フォルダーを作成します。JSONファイルは実行ファイルには同梱されず、オーバーレイからデータを要求されたときにData Dragonから取得し、`json\<言語コード>\` に保存します。個別チャンピオンのJSONは `/champion/<チャンピオン名>` で取得でき、`json\<言語コード>\champion\<チャンピオン名>.json` に保存されます（例: `/champion/Aatrox`）。
 
 #### 使用言語の設定
 
@@ -125,10 +126,22 @@ http://127.0.0.1:8888/html/LoL_ObjectTimer_Overlay.html
 http://127.0.0.1:8888/html/LoL_Scoreboard_Overlay.html
 ```
 
+チャンピオンごとのスキル情報を表示する場合は、次の個別HTMLを追加します。
+
+```text
+http://127.0.0.1:8888/html/LoL_ChampionSkills_Overlay.html
+```
+
 ゲーム開始時にロールごとのスプラッシュアートを表示する場合は、次の個別HTMLを追加します。
 
 ```text
 http://127.0.0.1:8888/html/LoL_GameStartSplash_Overlay.html
+```
+
+ゲーム開始時にアクティブプレイヤーのルーンを10秒間表示する場合は、次の個別HTMLを追加します。
+
+```text
+http://127.0.0.1:8888/html/LoL_PlayerRunes_Overlay.html
 ```
 
 個別HTMLは機能ごとに分かれているため、必要なものをそれぞれブラウザソースとして追加してください。HTMLと推奨サイズ、OBSの設定手順は[OBS設定手順](docs/OBS設定手順.md)を参照してください。オーバーレイHTMLは `html/`、全ページ共通のCSSは `css/LoLOverlay.css`、ページ固有のCSSは `css/individual/`、JavaScriptは `js/` にあります。これらのファイルを編集した後は、ブラウザソースを更新すると変更が反映されます。Chromeで確認するときも、HTMLファイルを直接開かず、同じ `http://127.0.0.1:8888/html/...` のURLを使用してください。
