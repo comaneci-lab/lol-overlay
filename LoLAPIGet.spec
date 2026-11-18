@@ -22,6 +22,8 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[
+        (os.path.join(SPECPATH, 'build', 'app_version.json'), 'build')
+    ] + [
         (os.path.join(SPECPATH, 'assets', image), 'assets')
         for image in GUI_IMAGES
     ],

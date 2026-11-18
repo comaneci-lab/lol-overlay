@@ -24,6 +24,264 @@ body {
     margin: 0 auto;
 }
 
+.champion-skills-toolbar {
+    display: flex;
+    grid-column: 1 / -1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.champion-skills-mode-label {
+    color: rgba(240, 244, 249, 0.72);
+    font-size: 12px;
+}
+
+.champion-skills-setup-toggle,
+.champion-skills-manual-edit,
+.champion-skills-picker-close,
+.champion-skills-picker-clear {
+    border: 1px solid rgba(255, 255, 255, 0.24);
+    border-radius: 5px;
+    background: rgba(12, 16, 23, 0.94);
+    color: #f3f5f7;
+    font: inherit;
+    cursor: pointer;
+}
+
+.champion-skills-setup-toggle {
+    padding: 5px 10px;
+}
+
+.champion-skills-setup-panel {
+    grid-column: 1 / -1;
+    box-sizing: border-box;
+    padding: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 6px;
+    background: rgba(12, 16, 23, 0.96);
+    color: #f3f5f7;
+}
+
+.champion-skills-setup-panel[hidden],
+.champion-skills-picker-recent[hidden],
+.champion-skills-setup-notice[hidden] {
+    display: none;
+}
+
+.champion-skills-setup-panel h2 {
+    margin: 0;
+    font-size: 15px;
+}
+
+.champion-skills-setup-hint,
+.champion-skills-picker-hint {
+    margin: 4px 0 8px;
+    color: rgba(240, 244, 249, 0.66);
+    font-size: 11px;
+}
+
+.champion-skills-setup-slots {
+    display: grid;
+    grid-template-columns: repeat(5, minmax(112px, 1fr));
+    gap: 5px;
+}
+
+.champion-skills-setup-slot {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 5px;
+    padding: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 5px;
+    color: #f3f5f7;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.champion-skills-setup-slot-order {
+    background: rgba(24, 53, 78, 0.94);
+}
+
+.champion-skills-setup-slot-chaos {
+    background: rgba(78, 35, 40, 0.94);
+}
+
+.champion-skills-setup-slot-name {
+    color: rgba(240, 244, 249, 0.68);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.champion-skills-setup-slot-champion {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    overflow-wrap: anywhere;
+}
+
+.champion-skills-setup-slot-icon {
+    width: 26px;
+    height: 26px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.champion-skills-setup-notice {
+    margin: 8px 0 0;
+    color: #ffd58a;
+    font-size: 11px;
+}
+
+.champion-skills-picker {
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+
+.champion-skills-picker-heading,
+.champion-skills-picker-result-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.champion-skills-picker-heading h3,
+.champion-skills-picker-section-title {
+    margin: 0 0 6px;
+    font-size: 13px;
+}
+
+.champion-skills-picker-close,
+.champion-skills-picker-clear {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+.champion-skills-picker-search-label {
+    display: block;
+    margin-top: 8px;
+    color: rgba(240, 244, 249, 0.8);
+    font-size: 11px;
+}
+
+.champion-skills-picker-search {
+    display: block;
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 4px;
+    padding: 7px;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.3);
+    color: #fff;
+    font: inherit;
+}
+
+.champion-skills-picker-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+}
+
+.champion-skills-picker-tag {
+    padding: 4px 7px;
+    border: 1px solid rgba(255, 255, 255, 0.22);
+    border-radius: 12px;
+    background: transparent;
+    color: rgba(240, 244, 249, 0.78);
+    font: inherit;
+    font-size: 10px;
+    cursor: pointer;
+}
+
+.champion-skills-picker-tag-selected {
+    border-color: #9bd3ff;
+    background: rgba(84, 175, 255, 0.2);
+    color: #fff;
+}
+
+.champion-skills-picker-clear {
+    margin-top: 7px;
+}
+
+.champion-skills-picker-section-title {
+    margin-top: 10px;
+}
+
+.champion-skills-picker-options {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 4px;
+    max-height: 220px;
+    overflow: auto;
+}
+
+.champion-skills-picker-recent {
+    max-height: none;
+    margin-bottom: 8px;
+}
+
+.champion-skills-picker-option {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 6px;
+    padding: 4px;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    color: #f3f5f7;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+
+.champion-skills-picker-option:hover,
+.champion-skills-setup-slot:hover,
+.champion-skills-manual-edit:hover {
+    border-color: rgba(155, 211, 255, 0.7);
+}
+
+.champion-skills-picker-icon {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 auto;
+    border-radius: 4px;
+    object-fit: cover;
+}
+
+.champion-skills-picker-option-details {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    overflow-wrap: anywhere;
+}
+
+.champion-skills-picker-option-details strong {
+    font-size: 11px;
+}
+
+.champion-skills-picker-option-id,
+.champion-skills-picker-count {
+    color: rgba(240, 244, 249, 0.58);
+    font-size: 9px;
+}
+
+.champion-skills-picker-empty {
+    grid-column: 1 / -1;
+    margin: 4px 0;
+    color: rgba(240, 244, 249, 0.68);
+    font-size: 11px;
+}
+
 .champion-skills-description-toggle {
     grid-column: 1 / -1;
     justify-self: end;
@@ -82,6 +340,17 @@ body {
     justify-content: center;
     gap: 6px;
     min-width: 0;
+}
+
+.champion-skills-manual-role {
+    color: rgba(240, 244, 249, 0.68);
+    font-size: 10px;
+    font-weight: 700;
+}
+
+.champion-skills-manual-edit {
+    padding: 2px 6px;
+    font-size: 10px;
 }
 
 .champion-skills-champion-icon {

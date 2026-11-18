@@ -2,6 +2,8 @@ const CHAMPION_SKILLS_GAME_DATA_URL = "/allgamedata";
 const CHAMPION_SKILLS_INDEX_URL = "/champions";
 const CHAMPION_SKILLS_DATA_URL = "/champion";
 const CHAMPION_SKILLS_DATA_DRAGON_VERSION = "16.22.1";
+const CHAMPION_SKILLS_LINEUP_STORAGE_KEY = "lol-overlay.champion-skills.lineup";
+const CHAMPION_SKILLS_RECENT_STORAGE_KEY = "lol-overlay.champion-skills.recent";
 const CHAMPION_SKILLS_ROLES = [
     "TOP",
     "JUNGLE",
@@ -10,13 +12,111 @@ const CHAMPION_SKILLS_ROLES = [
     "UTILITY"
 ];
 const CHAMPION_SKILLS_TEAMS = ["ORDER", "CHAOS"];
+const CHAMPION_SKILLS_ROLE_LABELS = {
+    TOP: "TOP",
+    JUNGLE: "JUNGLE",
+    MIDDLE: "MID",
+    BOTTOM: "ADC",
+    UTILITY: "SUPPORT"
+};
+const CHAMPION_SKILLS_TAG_LABELS = {
+    Fighter: "ファイター",
+    Mage: "メイジ",
+    Assassin: "アサシン",
+    Tank: "タンク",
+    Marksman: "マークスマン",
+    Support: "サポート"
+};
 
 const championSkillsCanvas = document.getElementById("overlay-canvas");
 const championSkillsIndex = new Map();
 const championSkillsData = new Map();
+const championSkillsCatalogById = new Map();
+let championSkillsCatalog = [];
+let championSkillsManualLineup = loadChampionSkillsManualLineup();
+let championSkillsRecentIds = loadChampionSkillsRecentIds();
 let championSkillsUpdateInProgress = false;
 let championSkillsBoardRendered = false;
 let championSkillsEndPollFailures = 0;
+let championSkillsCurrentMode = null;
+let championSkillsCurrentTeams = null;
+let championSkillsLiveSignature = null;
+let championSkillsDescriptionsVisible = false;
+let championSkillsSetupOpen = false;
+let championSkillsPickerTarget = null;
+let championSkillsSearchText = "";
+let championSkillsSelectedTags = new Set();
+let championSkillsManualRenderRevision = 0;
+let championSkillsSetupNotice = "";
+
+function createEmptyChampionSkillsLineup() {
+    return Object.fromEntries(
+        CHAMPION_SKILLS_TEAMS.map(team => [
+            team,
+            Object.fromEntries(CHAMPION_SKILLS_ROLES.map(role => [role, null]))
+        ])
+    );
+}
+
+function loadChampionSkillsManualLineup() {
+    const lineup = createEmptyChampionSkillsLineup();
+    try {
+        const stored = JSON.parse(
+            localStorage.getItem(CHAMPION_SKILLS_LINEUP_STORAGE_KEY) || "null"
+        );
+        for (const team of CHAMPION_SKILLS_TEAMS) {
+            for (const role of CHAMPION_SKILLS_ROLES) {
+                const championId = stored?.[team]?.[role];
+                if (typeof championId === "string" && /^[A-Za-z0-9]+$/.test(championId)) {
+                    lineup[team][role] = championId;
+                }
+            }
+        }
+    } catch (error) {
+        console.error("failed to load saved champion skills lineup", error);
+    }
+    return lineup;
+}
+
+function loadChampionSkillsRecentIds() {
+    try {
+        const stored = JSON.parse(
+            localStorage.getItem(CHAMPION_SKILLS_RECENT_STORAGE_KEY) || "[]"
+        );
+        if (Array.isArray(stored)) {
+            return [...new Set(
+                stored.filter(id => typeof id === "string" && /^[A-Za-z0-9]+$/.test(id))
+            )].slice(0, 8);
+        }
+    } catch (error) {
+        console.error("failed to load recent champion skills selections", error);
+    }
+    return [];
+}
+
+function saveChampionSkillsLineup() {
+    try {
+        localStorage.setItem(
+            CHAMPION_SKILLS_LINEUP_STORAGE_KEY,
+            JSON.stringify(championSkillsManualLineup)
+        );
+        return true;
+    } catch (error) {
+        console.error("failed to save champion skills lineup", error);
+        return false;
+    }
+}
+
+function saveChampionSkillsRecentIds() {
+    try {
+        localStorage.setItem(
+            CHAMPION_SKILLS_RECENT_STORAGE_KEY,
+            JSON.stringify(championSkillsRecentIds)
+        );
+    } catch (error) {
+        console.error("failed to save recent champion skills selections", error);
+    }
+}
 
 function normalizeChampionSkillsRole(position) {
     const aliases = {
@@ -79,13 +179,24 @@ async function loadChampionSkillsIndex() {
         throw new Error("champion index response has an invalid format");
     }
 
+    championSkillsCatalog = [];
+    championSkillsCatalogById.clear();
+    championSkillsIndex.clear();
     for (const champion of Object.values(champions)) {
         if (!champion?.id) continue;
-        championSkillsIndex.set(String(champion.id).toLowerCase(), champion.id);
+        const catalogEntry = {
+            id: String(champion.id),
+            name: String(champion.name ?? champion.id),
+            tags: Array.isArray(champion.tags) ? champion.tags : []
+        };
+        championSkillsIndex.set(catalogEntry.id.toLowerCase(), catalogEntry.id);
         if (champion.name) {
-            championSkillsIndex.set(String(champion.name).toLowerCase(), champion.id);
+            championSkillsIndex.set(catalogEntry.name.toLowerCase(), catalogEntry.id);
         }
+        championSkillsCatalog.push(catalogEntry);
+        championSkillsCatalogById.set(catalogEntry.id, catalogEntry);
     }
+    championSkillsCatalog.sort((left, right) => left.name.localeCompare(right.name));
 }
 
 function resolveChampionSkillsId(championName) {
@@ -147,6 +258,336 @@ function createChampionSkillsImage(src, alt, className) {
     image.alt = alt;
     image.loading = "lazy";
     return image;
+}
+
+function getChampionSkillsDisplayName(championId) {
+    return championSkillsCatalogById.get(championId)?.name ?? championId;
+}
+
+function createChampionSkillsManualTeams() {
+    const teams = Object.fromEntries(
+        CHAMPION_SKILLS_TEAMS.map(team => [team, new Map()])
+    );
+    for (const team of CHAMPION_SKILLS_TEAMS) {
+        for (const role of CHAMPION_SKILLS_ROLES) {
+            const championId = championSkillsManualLineup[team][role];
+            if (championId) {
+                teams[team].set(role, {
+                    team,
+                    position: role,
+                    championName: championId
+                });
+            }
+        }
+    }
+    return teams;
+}
+
+function createChampionSkillsChampionOption(champion) {
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "champion-skills-picker-option";
+
+    const image = createChampionSkillsImage(
+        `../assets/champion/${encodeURIComponent(champion.id)}.png`,
+        "",
+        "champion-skills-picker-icon"
+    );
+    image.onerror = () => {
+        image.onerror = null;
+        image.src = `https://ddragon.leagueoflegends.com/cdn/${CHAMPION_SKILLS_DATA_DRAGON_VERSION}/img/champion/${encodeURIComponent(champion.id)}.png`;
+    };
+    option.appendChild(image);
+
+    const details = document.createElement("span");
+    details.className = "champion-skills-picker-option-details";
+    const name = document.createElement("strong");
+    name.textContent = champion.name;
+    details.appendChild(name);
+    const id = document.createElement("span");
+    id.className = "champion-skills-picker-option-id";
+    id.textContent = champion.id;
+    details.appendChild(id);
+    option.appendChild(details);
+
+    option.addEventListener("click", () => {
+        void setChampionSkillsManualSelection(champion.id);
+    });
+    return option;
+}
+
+function refreshChampionSkillsPickerResults(searchInput, recentList, resultList, countLabel) {
+    const searchText = searchInput.value.trim().toLowerCase();
+    const recentChampions = championSkillsRecentIds
+        .map(id => championSkillsCatalogById.get(id))
+        .filter(Boolean);
+    recentList.replaceChildren();
+    for (const champion of recentChampions) {
+        recentList.appendChild(createChampionSkillsChampionOption(champion));
+    }
+    recentList.hidden = recentChampions.length === 0;
+
+    const matches = championSkillsCatalog.filter(champion => {
+        const matchesText = !searchText ||
+            `${champion.name} ${champion.id}`.toLowerCase().includes(searchText);
+        const matchesTags = championSkillsSelectedTags.size === 0 ||
+            champion.tags.some(tag => championSkillsSelectedTags.has(tag));
+        return matchesText && matchesTags;
+    });
+    resultList.replaceChildren();
+    for (const champion of matches) {
+        resultList.appendChild(createChampionSkillsChampionOption(champion));
+    }
+    countLabel.textContent = `${matches.length}件`;
+    if (matches.length === 0) {
+        const empty = document.createElement("p");
+        empty.className = "champion-skills-picker-empty";
+        empty.textContent = "該当するチャンピオンがありません";
+        resultList.appendChild(empty);
+    }
+}
+
+function createChampionSkillsPickerPanel() {
+    const target = championSkillsPickerTarget;
+    if (!target) return null;
+
+    const picker = document.createElement("section");
+    picker.className = "champion-skills-picker";
+    picker.setAttribute("aria-label", "チャンピオン選択");
+
+    const heading = document.createElement("div");
+    heading.className = "champion-skills-picker-heading";
+    const title = document.createElement("h3");
+    title.textContent = `${target.team} / ${CHAMPION_SKILLS_ROLE_LABELS[target.role]} のチャンピオン`;
+    heading.appendChild(title);
+
+    const closeButton = document.createElement("button");
+    closeButton.type = "button";
+    closeButton.className = "champion-skills-picker-close";
+    closeButton.textContent = "閉じる";
+    closeButton.addEventListener("click", () => {
+        championSkillsPickerTarget = null;
+        renderChampionSkillsBoard(championSkillsCurrentTeams, championSkillsCurrentMode);
+    });
+    heading.appendChild(closeButton);
+    picker.appendChild(heading);
+
+    const searchLabel = document.createElement("label");
+    searchLabel.className = "champion-skills-picker-search-label";
+    searchLabel.textContent = "名前または英語IDで検索";
+    const searchInput = document.createElement("input");
+    searchInput.type = "search";
+    searchInput.className = "champion-skills-picker-search";
+    searchInput.placeholder = "例: アーリ / Ahri";
+    searchInput.autocomplete = "off";
+    searchInput.value = championSkillsSearchText;
+    searchInput.addEventListener("input", () => {
+        championSkillsSearchText = searchInput.value;
+        refreshChampionSkillsPickerResults(
+            searchInput,
+            recentList,
+            resultList,
+            countLabel
+        );
+    });
+    searchLabel.appendChild(searchInput);
+    picker.appendChild(searchLabel);
+
+    const tagHeading = document.createElement("p");
+    tagHeading.className = "champion-skills-picker-hint";
+    tagHeading.textContent = "タグはレーンではなくチャンピオンの分類です";
+    picker.appendChild(tagHeading);
+    const tagFilters = document.createElement("div");
+    tagFilters.className = "champion-skills-picker-tags";
+    for (const [tag, label] of Object.entries(CHAMPION_SKILLS_TAG_LABELS)) {
+        const tagButton = document.createElement("button");
+        tagButton.type = "button";
+        tagButton.className = "champion-skills-picker-tag";
+        tagButton.textContent = label;
+        tagButton.setAttribute(
+            "aria-pressed",
+            String(championSkillsSelectedTags.has(tag))
+        );
+        if (championSkillsSelectedTags.has(tag)) {
+            tagButton.classList.add("champion-skills-picker-tag-selected");
+        }
+        tagButton.addEventListener("click", () => {
+            if (championSkillsSelectedTags.has(tag)) {
+                championSkillsSelectedTags.delete(tag);
+            } else {
+                championSkillsSelectedTags.add(tag);
+            }
+            const selected = championSkillsSelectedTags.has(tag);
+            tagButton.classList.toggle(
+                "champion-skills-picker-tag-selected",
+                selected
+            );
+            tagButton.setAttribute("aria-pressed", String(selected));
+            refreshChampionSkillsPickerResults(
+                searchInput,
+                recentList,
+                resultList,
+                countLabel
+            );
+        });
+        tagFilters.appendChild(tagButton);
+    }
+    picker.appendChild(tagFilters);
+
+    const selectedId = championSkillsManualLineup[target.team][target.role];
+    if (selectedId) {
+        const clearButton = document.createElement("button");
+        clearButton.type = "button";
+        clearButton.className = "champion-skills-picker-clear";
+        clearButton.textContent = "この枠をクリア";
+        clearButton.addEventListener("click", () => {
+            void setChampionSkillsManualSelection(null);
+        });
+        picker.appendChild(clearButton);
+    }
+
+    const recentHeading = document.createElement("h4");
+    recentHeading.className = "champion-skills-picker-section-title";
+    recentHeading.textContent = "最近選択したチャンピオン";
+    picker.appendChild(recentHeading);
+    const recentList = document.createElement("div");
+    recentList.className = "champion-skills-picker-options champion-skills-picker-recent";
+    picker.appendChild(recentList);
+
+    const resultHeading = document.createElement("div");
+    resultHeading.className = "champion-skills-picker-result-heading";
+    const resultTitle = document.createElement("h4");
+    resultTitle.className = "champion-skills-picker-section-title";
+    resultTitle.textContent = "チャンピオン";
+    resultHeading.appendChild(resultTitle);
+    const countLabel = document.createElement("span");
+    countLabel.className = "champion-skills-picker-count";
+    resultHeading.appendChild(countLabel);
+    picker.appendChild(resultHeading);
+    const resultList = document.createElement("div");
+    resultList.className = "champion-skills-picker-options";
+    picker.appendChild(resultList);
+
+    refreshChampionSkillsPickerResults(
+        searchInput,
+        recentList,
+        resultList,
+        countLabel
+    );
+    return picker;
+}
+
+function createChampionSkillsSetupPanel() {
+    const panel = document.createElement("section");
+    panel.className = "champion-skills-setup-panel";
+    panel.hidden = !championSkillsSetupOpen;
+
+    const heading = document.createElement("h2");
+    heading.textContent = "手動ラインナップ";
+    panel.appendChild(heading);
+    const hint = document.createElement("p");
+    hint.className = "champion-skills-setup-hint";
+    hint.textContent = "ゲーム中は実際の試合情報が優先されます";
+    panel.appendChild(hint);
+
+    const slots = document.createElement("div");
+    slots.className = "champion-skills-setup-slots";
+    for (const team of CHAMPION_SKILLS_TEAMS) {
+        for (const role of CHAMPION_SKILLS_ROLES) {
+            const slotButton = document.createElement("button");
+            slotButton.type = "button";
+            slotButton.className = `champion-skills-setup-slot champion-skills-setup-slot-${team.toLowerCase()}`;
+            slotButton.setAttribute(
+                "aria-label",
+                `${team} ${CHAMPION_SKILLS_ROLE_LABELS[role]} のチャンピオンを選択`
+            );
+
+            const slotName = document.createElement("span");
+            slotName.className = "champion-skills-setup-slot-name";
+            slotName.textContent = `${team} / ${CHAMPION_SKILLS_ROLE_LABELS[role]}`;
+            slotButton.appendChild(slotName);
+
+            const championId = championSkillsManualLineup[team][role];
+            const championInfo = document.createElement("span");
+            championInfo.className = "champion-skills-setup-slot-champion";
+            if (championId) {
+                const image = createChampionSkillsImage(
+                    `../assets/champion/${encodeURIComponent(championId)}.png`,
+                    "",
+                    "champion-skills-setup-slot-icon"
+                );
+                image.onerror = () => {
+                    image.onerror = null;
+                    image.src = `https://ddragon.leagueoflegends.com/cdn/${CHAMPION_SKILLS_DATA_DRAGON_VERSION}/img/champion/${encodeURIComponent(championId)}.png`;
+                };
+                championInfo.appendChild(image);
+                const name = document.createElement("span");
+                name.textContent = getChampionSkillsDisplayName(championId);
+                championInfo.appendChild(name);
+            } else {
+                championInfo.textContent = "チャンピオンを選択";
+            }
+            slotButton.appendChild(championInfo);
+            slotButton.addEventListener("click", () => {
+                championSkillsPickerTarget = { team, role };
+                championSkillsSearchText = "";
+                championSkillsSelectedTags.clear();
+                renderChampionSkillsBoard(
+                    championSkillsCurrentTeams,
+                    championSkillsCurrentMode
+                );
+            });
+            slots.appendChild(slotButton);
+        }
+    }
+    panel.appendChild(slots);
+
+    const notice = document.createElement("p");
+    notice.className = "champion-skills-setup-notice";
+    notice.textContent = championSkillsSetupNotice;
+    notice.hidden = !championSkillsSetupNotice;
+    panel.appendChild(notice);
+
+    if (championSkillsPickerTarget) {
+        const picker = createChampionSkillsPickerPanel();
+        if (picker) panel.appendChild(picker);
+    }
+    return panel;
+}
+
+async function setChampionSkillsManualSelection(championId) {
+    if (!championSkillsPickerTarget) return;
+    const { team, role } = championSkillsPickerTarget;
+    championSkillsManualLineup[team][role] = championId;
+    championSkillsPickerTarget = null;
+    championSkillsSearchText = "";
+    championSkillsSelectedTags.clear();
+
+    const saved = saveChampionSkillsLineup();
+    championSkillsSetupNotice = saved
+        ? ""
+        : "設定を保存できませんでした。再読み込み後に選択が消える可能性があります。";
+    if (championId) {
+        championSkillsRecentIds = [
+            championId,
+            ...championSkillsRecentIds.filter(id => id !== championId)
+        ].slice(0, 8);
+        saveChampionSkillsRecentIds();
+    }
+
+    if (championSkillsCurrentMode === "live") {
+        renderChampionSkillsBoard(
+            championSkillsCurrentTeams,
+            championSkillsCurrentMode
+        );
+        return;
+    }
+    try {
+        await renderManualChampionSkillsBoard();
+    } catch (error) {
+        console.error("failed to refresh manual champion lineup", error);
+        showChampionSkillsMessage("チャンピオン情報の取得に失敗しました", true);
+    }
 }
 
 function createChampionSkillItem(skill, key, iconUrl) {
@@ -227,13 +668,40 @@ function createChampionSkillsAbilities(champion) {
     return abilities;
 }
 
-function createChampionSkillsPlayerCard(player) {
+function createChampionSkillsPlayerCard(player, team, role, mode) {
     const card = document.createElement("article");
     card.className = "champion-skills-player";
 
     if (!player) {
         card.classList.add("champion-skills-player-empty");
-        card.textContent = "プレイヤー情報なし";
+        if (mode === "manual") {
+            const roleLabel = document.createElement("span");
+            roleLabel.className = "champion-skills-manual-role";
+            roleLabel.textContent = CHAMPION_SKILLS_ROLE_LABELS[role];
+            card.appendChild(roleLabel);
+
+            const selectButton = document.createElement("button");
+            selectButton.type = "button";
+            selectButton.className = "champion-skills-manual-edit";
+            selectButton.textContent = "チャンピオンを選択";
+            selectButton.setAttribute(
+                "aria-label",
+                `${team} ${CHAMPION_SKILLS_ROLE_LABELS[role]} のチャンピオンを選択`
+            );
+            selectButton.addEventListener("click", () => {
+                championSkillsPickerTarget = { team, role };
+                championSkillsSearchText = "";
+                championSkillsSelectedTags.clear();
+                championSkillsSetupOpen = true;
+                renderChampionSkillsBoard(
+                    championSkillsCurrentTeams,
+                    championSkillsCurrentMode
+                );
+            });
+            card.appendChild(selectButton);
+        } else {
+            card.textContent = "プレイヤー情報なし";
+        }
         return card;
     }
 
@@ -243,6 +711,13 @@ function createChampionSkillsPlayerCard(player) {
     const championName = championData?.name ?? player.championName ?? "不明";
     const identity = document.createElement("div");
     identity.className = "champion-skills-identity";
+
+    if (mode === "manual") {
+        const roleLabel = document.createElement("span");
+        roleLabel.className = "champion-skills-manual-role";
+        roleLabel.textContent = CHAMPION_SKILLS_ROLE_LABELS[role];
+        identity.appendChild(roleLabel);
+    }
 
     if (championId) {
         const image = createChampionSkillsImage(
@@ -261,6 +736,27 @@ function createChampionSkillsPlayerCard(player) {
     name.className = "champion-skills-champion-name";
     name.textContent = championName;
     identity.appendChild(name);
+    if (mode === "manual") {
+        const editButton = document.createElement("button");
+        editButton.type = "button";
+        editButton.className = "champion-skills-manual-edit";
+        editButton.textContent = "変更";
+        editButton.setAttribute(
+            "aria-label",
+            `${team} ${CHAMPION_SKILLS_ROLE_LABELS[role]} のチャンピオンを変更`
+        );
+        editButton.addEventListener("click", () => {
+            championSkillsPickerTarget = { team, role };
+            championSkillsSearchText = "";
+            championSkillsSelectedTags.clear();
+            championSkillsSetupOpen = true;
+            renderChampionSkillsBoard(
+                championSkillsCurrentTeams,
+                championSkillsCurrentMode
+            );
+        });
+        identity.appendChild(editButton);
+    }
     card.appendChild(identity);
 
     if (championData) {
@@ -279,32 +775,85 @@ function createChampionSkillsPlayerCard(player) {
     return card;
 }
 
-function renderChampionSkillsBoard(teams) {
+function renderChampionSkillsBoard(teams, mode = "live") {
+    if (mode === "live") {
+        championSkillsManualRenderRevision += 1;
+    }
+    championSkillsCurrentTeams = teams;
+    championSkillsCurrentMode = mode;
+    championSkillsBoardRendered = true;
     championSkillsCanvas.replaceChildren();
     championSkillsCanvas.classList.remove("champion-skills-unavailable");
 
     const board = document.createElement("main");
     board.className = "champion-skills-board";
 
+    const toolbar = document.createElement("div");
+    toolbar.className = "champion-skills-toolbar";
+    const modeLabel = document.createElement("span");
+    modeLabel.className = "champion-skills-mode-label";
+    modeLabel.textContent = mode === "live"
+        ? "ゲーム情報を表示中"
+        : "手動ラインナップを表示中";
+    toolbar.appendChild(modeLabel);
+
+    const setupToggle = document.createElement("button");
+    setupToggle.className = "champion-skills-setup-toggle";
+    setupToggle.type = "button";
+    setupToggle.textContent = championSkillsSetupOpen
+        ? "設定を閉じる"
+        : "チャンピオン設定";
+    setupToggle.setAttribute("aria-expanded", String(championSkillsSetupOpen));
+    setupToggle.addEventListener("click", () => {
+        championSkillsSetupOpen = !championSkillsSetupOpen;
+        if (!championSkillsSetupOpen) {
+            championSkillsPickerTarget = null;
+        }
+        renderChampionSkillsBoard(
+            championSkillsCurrentTeams,
+            championSkillsCurrentMode
+        );
+    });
+    toolbar.appendChild(setupToggle);
+    board.appendChild(toolbar);
+
+    board.appendChild(createChampionSkillsSetupPanel());
+
     const descriptionToggle = document.createElement("button");
     descriptionToggle.className = "champion-skills-description-toggle";
     descriptionToggle.type = "button";
-    descriptionToggle.textContent = "スキル説明を表示";
-    descriptionToggle.setAttribute("aria-expanded", "false");
+    descriptionToggle.textContent = championSkillsDescriptionsVisible
+        ? "スキル説明を隠す"
+        : "スキル説明を表示";
+    descriptionToggle.setAttribute(
+        "aria-expanded",
+        String(championSkillsDescriptionsVisible)
+    );
+    if (championSkillsDescriptionsVisible) {
+        board.classList.add("champion-skills-descriptions-visible");
+    }
     descriptionToggle.addEventListener("click", () => {
-        const descriptionsVisible = board.classList.toggle(
+        championSkillsDescriptionsVisible = board.classList.toggle(
             "champion-skills-descriptions-visible"
         );
-        descriptionToggle.textContent = descriptionsVisible
+        descriptionToggle.textContent = championSkillsDescriptionsVisible
             ? "スキル説明を隠す"
             : "スキル説明を表示";
-        descriptionToggle.setAttribute("aria-expanded", String(descriptionsVisible));
+        descriptionToggle.setAttribute(
+            "aria-expanded",
+            String(championSkillsDescriptionsVisible)
+        );
     });
     board.appendChild(descriptionToggle);
 
     for (const role of CHAMPION_SKILLS_ROLES) {
         for (const team of CHAMPION_SKILLS_TEAMS) {
-            const card = createChampionSkillsPlayerCard(teams[team].get(role));
+            const card = createChampionSkillsPlayerCard(
+                teams[team].get(role),
+                team,
+                role,
+                mode
+            );
             card.classList.add(`champion-skills-player-${team.toLowerCase()}`);
             board.appendChild(card);
         }
@@ -313,18 +862,41 @@ function renderChampionSkillsBoard(teams) {
     championSkillsCanvas.appendChild(board);
 }
 
-function handleChampionSkillsGameEnded() {
-    championSkillsBoardRendered = false;
-    championSkillsEndPollFailures = 0;
-    showChampionSkillsMessage("試合データを待っています");
+async function renderManualChampionSkillsBoard() {
+    const revision = ++championSkillsManualRenderRevision;
+    if (championSkillsCatalog.length === 0) {
+        await loadChampionSkillsIndex();
+    }
+    if (revision !== championSkillsManualRenderRevision) return;
+
+    const teams = createChampionSkillsManualTeams();
+    const championIds = new Set(
+        CHAMPION_SKILLS_TEAMS.flatMap(team =>
+            CHAMPION_SKILLS_ROLES.map(role => championSkillsManualLineup[team][role])
+        ).filter(Boolean)
+    );
+    await Promise.all([...championIds].map(loadChampionSkillsData));
+    if (revision !== championSkillsManualRenderRevision) return;
+    renderChampionSkillsBoard(teams, "manual");
 }
 
-function handleChampionSkillsGameUnavailable() {
-    if (!championSkillsBoardRendered) return;
+async function handleChampionSkillsGameEnded() {
+    championSkillsEndPollFailures = 0;
+    championSkillsLiveSignature = null;
+    await renderManualChampionSkillsBoard();
+}
+
+async function handleChampionSkillsGameUnavailable() {
+    if (championSkillsCurrentMode !== "live") {
+        if (championSkillsCurrentMode !== "manual") {
+            await renderManualChampionSkillsBoard();
+        }
+        return;
+    }
 
     championSkillsEndPollFailures += 1;
     if (championSkillsEndPollFailures >= 3) {
-        handleChampionSkillsGameEnded();
+        await handleChampionSkillsGameEnded();
     }
 }
 
@@ -351,16 +923,12 @@ async function updateChampionSkills() {
             result = await response.json();
         } catch (error) {
             console.error("failed to fetch champion skills game data", error);
-            if (championSkillsBoardRendered) {
-                handleChampionSkillsGameUnavailable();
-            } else {
-                showChampionSkillsMessage("チャンピオン情報の取得に失敗しました", true);
-            }
+            await handleChampionSkillsGameUnavailable();
             return;
         }
 
         if (result?.ok !== true) {
-            handleChampionSkillsGameUnavailable();
+            await handleChampionSkillsGameUnavailable();
             return;
         }
 
@@ -369,34 +937,50 @@ async function updateChampionSkills() {
             throw new Error("game data response has an invalid allPlayers field");
         }
         if (players.length === 0) {
-            if (championSkillsBoardRendered) {
-                handleChampionSkillsGameEnded();
+            if (championSkillsCurrentMode === "live") {
+                await handleChampionSkillsGameEnded();
+            } else if (championSkillsCurrentMode !== "manual") {
+                await renderManualChampionSkillsBoard();
             }
             return;
         }
 
         championSkillsEndPollFailures = 0;
-        if (championSkillsBoardRendered) return;
-
-        showChampionSkillsMessage("スキル情報を読み込み中...");
-        if (championSkillsIndex.size === 0) {
+        if (championSkillsCatalog.length === 0) {
             await loadChampionSkillsIndex();
         }
 
         const teams = groupChampionSkillsPlayers(players);
+        const liveSignature = JSON.stringify(
+            players.map(player => [
+                player?.team,
+                player?.position,
+                player?.championName
+            ])
+        );
+        if (
+            championSkillsCurrentMode === "live" &&
+            liveSignature === championSkillsLiveSignature
+        ) {
+            return;
+        }
+
         const championIds = new Set();
-        for (const player of players) {
-            const championId = resolveChampionSkillsId(player?.championName);
-            if (championId && !championSkillsData.has(championId)) {
-                championIds.add(championId);
+        for (const team of CHAMPION_SKILLS_TEAMS) {
+            for (const role of CHAMPION_SKILLS_ROLES) {
+                const player = teams[team].get(role);
+                const championId = resolveChampionSkillsId(player?.championName);
+                if (championId && !championSkillsData.has(championId)) {
+                    championIds.add(championId);
+                }
             }
         }
         await Promise.all([...championIds].map(loadChampionSkillsData));
-        renderChampionSkillsBoard(teams);
-        championSkillsBoardRendered = true;
+        renderChampionSkillsBoard(teams, "live");
+        championSkillsLiveSignature = liveSignature;
     } catch (error) {
         console.error("failed to update champion skills overlay", error);
-        if (!championSkillsBoardRendered) {
+        if (championSkillsCurrentMode !== "manual" && !championSkillsBoardRendered) {
             showChampionSkillsMessage("チャンピオン情報の取得に失敗しました", true);
         }
     } finally {

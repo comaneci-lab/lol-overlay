@@ -8,7 +8,11 @@ on:
       - "html/**"
       - "css/**"
       - "js/**"
+      - "scripts/**"
       - ".github/workflows/pages.yml"
+  release:
+    types:
+      - published
   workflow_dispatch:
 
 permissions:
@@ -22,6 +26,7 @@ concurrency:
 
 jobs:
   deploy:
+    if: github.event_name != 'release' || github.event.release.prerelease == false
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
@@ -29,6 +34,8 @@ jobs:
     steps:
       - name: Check out source
         uses: actions/checkout@v4
+        with:
+          ref: main
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
@@ -57,6 +64,8 @@ jobs:
                       relative_path = os.path.relpath(full_path, site_root).replace(
                           os.sep, "/"
                       )
+                      if relative_path.startswith("css/custom/"):
+                          continue
                       with open(full_path, "rb") as source_file:
                           contents = source_file.read()
                       files.append({
@@ -77,6 +86,12 @@ jobs:
           ) as manifest_file:
               json.dump(manifest, manifest_file, ensure_ascii=False, indent=2)
           PY
+
+      - name: Add latest application release manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUIRE_APP_UPDATE_MANIFEST: ${{ github.event_name == 'release' }}
+        run: python scripts/fetch_latest_app_update_manifest.py _site/app-update.json
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

@@ -63,9 +63,21 @@ LoLAPIGet.exe を実行してください。
 
 #### オーバーレイファイルの最新化
 
-観戦データウィンドウの「オーバーレイを最新化」から、GitHub Pagesで公開されたHTML・CSS・JavaScriptを取得できます。更新後は、変更を反映するためOBSのブラウザソースを再読み込みしてください。この操作では実行ファイル、assets、JSONは更新されません。実行ファイルはGitHub Releasesからダウンロードしてください。
+観戦データウィンドウの「接続・更新」タブにある「オーバーレイを最新化」から、GitHub Pagesで公開されたHTML・CSS・JavaScriptを取得できます。更新後は、変更を反映するためOBSのブラウザソースを再読み込みしてください。この操作では実行ファイル、assets、JSONは更新されません。実行ファイルはGitHub Releasesからダウンロードしてください。
 
-GitHub Pagesへの公開は、`main` ブランチの `html/`、`css/`、`js/` の変更時にGitHub Actionsで行います。リポジトリの「Settings」→「Pages」で、公開元を「GitHub Actions」に設定してください。
+起動時にPagesの公開版とローカルファイルを照合し、差分がある場合だけ最新化ボタンが有効になります。通信に失敗した場合は、ボタンから再試行できます。実行ファイルの更新確認にはPagesの`app-update.json`を使用し、ビルド元のGitコミットSHAを記録したうえで、実行中exeと公開exeのSHA-256を比較します。異なる実行ファイルが公開されている場合は該当するGitHub Releaseを案内します。実行ファイルは自動更新されません。
+
+`build.bat`で作成した開発用exeには、更新チェックを無効にする`.dev-environment`マーカーファイルが`dist`に作成されます。ローカルで動作確認する間はそのまま使用してください。配布時は、配布用フォルダーからこのファイルを削除してからZIPを作成してください。マーカーが残っていると、利用者環境でも更新チェックが無効になります。
+
+起動時に現在適用中のData Dragonバージョンと最新バージョンを照合し、assets・JSONが最新版なら「assets・JSONを最新化」ボタンは無効になります。更新状況を取得できない場合は手動更新できるようボタンを有効にします。現在のJSON言語も「接続・更新」タブに表示します。更新ボタンは設定ファイル`config/data_dragon_assets.json`に定義した画像だけを`assets`へマージ上書きし、アーカイブにないファイルや観戦データは削除しません。JSONキャッシュは全言語分を無効化し、次回要求時に新しいバージョンから再取得します。更新後はOBSのブラウザソースを再読み込みしてください。
+
+オーバーレイの色や配置を個別に変更する場合は、`css/custom/LoLOverlay.custom.css` を編集してください。このファイルは各オーバーレイで公式CSSの後に読み込まれ、Pagesの更新対象には含まれません。起動時の更新確認でファイルが存在しない場合は空のテンプレートを作成します。
+
+Data Dragonのassets更新対象と展開元・配置先の対応は、`config/data_dragon_assets.json` で管理します。現在の設定は指定先へマージ上書きし、アーカイブに存在しないファイルは削除しません。独自画像を含むその他のassetsフォルダーは更新対象外です。
+
+更新対象の公式CSSがローカルと異なる場合、上書き前に実行ファイルと同じフォルダーへ `.overlay-css-backup-*` フォルダーを作成して退避し、確認を表示します。古い公式CSSと個人編集は区別できないため、キャンセルすると更新全体を中止します（バックアップは残ります）。更新後、必要な編集内容をバックアップから `css/custom/LoLOverlay.custom.css` へ移してください。バックアップは自動削除されないため、移行を確認した後に不要なフォルダーを手動で削除できます。
+
+GitHub Pagesへの公開は、`main` ブランチの `html/`、`css/`、`js/` の変更時と、Release公開時にGitHub Actionsで行います。Release公開時は、最新Releaseに添付された`app-update.json`をPagesへ配置します。リポジトリの「Settings」→「Pages」で、公開元を「GitHub Actions」に設定してください。
 
 #### 使用言語の設定
 
@@ -137,6 +149,8 @@ http://127.0.0.1:8888/html/LoL_Scoreboard_Overlay.html
 ```text
 http://127.0.0.1:8888/html/LoL_ChampionSkills_Overlay.html
 ```
+
+ゲーム外では「チャンピオン設定」からORDER／CHAOS各5ロールのチャンピオンを設定できます。検索欄で名前または英語IDを検索し、必要に応じてチャンピオン分類タグで絞り込んでください。選択内容はブラウザーに保存され、最近選択したチャンピオンも表示されます。ゲーム中は実際の試合情報が優先され、ゲーム外に戻ると保存したラインナップを表示します。
 
 ゲーム開始時にロールごとのスプラッシュアートを表示する場合は、次の個別HTMLを追加します。
 
@@ -252,6 +266,10 @@ See the LICENSE file for details.
 ## 実行ファイルのビルド
 
 Python と PyInstaller をインストールした Windows 環境で、プロジェクトのルートにある `build.bat` を実行してください。
+
+Release用の実行ファイルは、Gitタグが付いたコミットでビルドしてください。タグのないコミットからのビルドは「開発版」と表示され、Releaseとのバージョン比較は行いません。
+
+`build.bat`は、タグ付きビルドの場合に実行ファイルのバージョン・コミットSHA・SHA-256を含む`dist\app-update.json`を生成します。GitHub Releaseを公開する前に、配布ZIPとこのJSONをそれぞれRelease assetとして添付してください。JSONのasset名は`app-update.json`にしてください。Release公開後、GitHub ActionsがJSONをGitHub Pagesへ反映します。JSONが添付されていないReleaseはPagesへの公開が失敗します。開発版では古いJSONが誤用されないよう、`app-update.json`は生成されません。
 
 ```text
 dist\LoLAPIGet.exe

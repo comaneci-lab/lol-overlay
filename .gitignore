@@ -24,6 +24,9 @@ __pycache__/
 # Distribution / packaging
 .Python
 build/
+.overlay-css-backup-*/
+.dev-environment
+.ddragon-version
 develop-eggs/
 dist/
 downloads/

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "archive_roots": {
+    "versioned": "{version}/img",
+    "shared": "img"
+  },
+  "copy_mode": "merge_overwrite",
+  "delete_files_not_in_archive": false,
+  "directories": [
+    {
+      "source_root": "versioned",
+      "source": "champion",
+      "destination": "champion"
+    },
+    {
+      "source_root": "shared",
+      "source": "champion/loading",
+      "destination": "loading"
+    },
+    {
+      "source_root": "versioned",
+      "source": "item",
+      "destination": "items"
+    },
+    {
+      "source_root": "versioned",
+      "source": "spell",
+      "destination": "spell"
+    },
+    {
+      "source_root": "shared",
+      "source": "perk-images",
+      "destination": "perk-images"
+    },
+    {
+      "source_root": "versioned",
+      "source": "map",
+      "destination": "map"
+    }
+  ]
+}
