@@ -1,0 +1,47 @@
+html,
+body,
+#overlay-canvas {
+    width: 100%;
+    height: 100%;
+}
+
+#overlay-canvas {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.kpa-widget {
+    box-sizing: border-box;
+    width: 340px;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(15, 23, 42, 0.9);
+    color: #f8fafc;
+    font: 16px system-ui, sans-serif;
+}
+
+.kpa-widget[hidden] {
+    display: none;
+}
+
+.kpa-widget h1 {
+    margin: 0 0 8px;
+    font-size: 18px;
+}
+
+.kpa-widget table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.kpa-widget th,
+.kpa-widget td {
+    padding: 4px 6px;
+    text-align: left;
+}
+
+.kpa-widget th:last-child,
+.kpa-widget td:last-child {
+    text-align: right;
+}

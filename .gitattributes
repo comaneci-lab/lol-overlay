@@ -1,3 +1,6 @@
 /html/**/*.html text eol=lf
 /css/**/*.css text eol=lf
 /js/**/*.js text eol=lf
+/examples/**/*.html text eol=lf
+/examples/**/*.css text eol=lf
+/examples/**/*.js text eol=lf
