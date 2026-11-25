@@ -295,7 +295,7 @@ Python と PyInstaller をインストールした Windows 環境で、プロジ
 
 起動時に開発版またはリリース版を選択します。開発版はタグの有無にかかわらず「開発版」と表示され、Releaseとのバージョン比較は行いません。リリース版では `v0.7.1` のようなタグ名を入力すると、現在のコミットにローカルタグを作成します。同じコミットに既存のタグがある場合は再利用できます。未コミットの変更がある場合や、同名タグが別のコミットにある場合は中止します。
 
-タグは自動でpushされません。ビルド後にコミットとタグをGitHubへpushしてください（例: `git push origin main`、`git push origin v0.7.1`）。ビルドが失敗した場合も作成済みのローカルタグは残り、同じコミットで再実行できます。
+リリース版のビルドが成功すると、作成または再利用したタグを `origin` に自動でpushします。コミットやブランチは自動でpushしないため、事前にGitHubへpushしてください。ビルドまたはタグのpushが失敗した場合も作成済みのローカルタグは残り、同じコミットで再実行できます。開発版ではタグをpushしません。
 
 `build.bat`は、リリース版の場合に実行ファイルのバージョン・コミットSHA・SHA-256を含む`dist\app-update.json`を生成します。配布ZIPには同じビルドで生成されたexeを含めてください。GitHub Releaseを公開する前に、配布ZIPとこのJSONをそれぞれRelease assetとして添付してください。JSONのasset名は`app-update.json`にしてください。Release公開後、GitHub ActionsがJSONをGitHub Pagesへ反映します。JSONが添付されていないReleaseはPagesへの公開が失敗します。開発版では古いJSONが誤用されないよう、`app-update.json`は生成されません。
 

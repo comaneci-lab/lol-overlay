@@ -25,4 +25,7 @@ if errorlevel 1 exit /b %errorlevel%
 type nul > "dist\.dev-environment"
 if errorlevel 1 exit /b 1
 
+python scripts\write_build_version.py --push-tag
+if errorlevel 1 exit /b %errorlevel%
+
 echo Build complete: dist (remove .dev-environment before distribution)
