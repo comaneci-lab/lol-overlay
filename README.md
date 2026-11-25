@@ -89,7 +89,7 @@ Data Dragonのassets更新対象と展開元・配置先の対応は、`config/d
 
 更新対象の公式CSSがローカルと異なる場合、上書き前に実行ファイルと同じフォルダーへ `.overlay-css-backup-*` フォルダーを作成して退避し、確認を表示します。古い公式CSSと個人編集は区別できないため、キャンセルすると更新全体を中止します（バックアップは残ります）。更新後、必要な編集内容をバックアップから `css/custom/LoLOverlay.custom.css` へ移してください。バックアップは自動削除されないため、移行を確認した後に不要なフォルダーを手動で削除できます。
 
-GitHub Pagesへの公開は、`main` ブランチの `html/`、`css/`、`js/` の変更時と、Release公開時にGitHub Actionsで行います。Release公開時は、最新Releaseに添付された`app-update.json`をPagesへ配置します。リポジトリの「Settings」→「Pages」で、公開元を「GitHub Actions」に設定してください。
+GitHub Pagesへの自動公開は、通常のRelease公開時にGitHub Actionsで行います。リリースタグのコミットからオーバーレイを作成し、最新Releaseに添付された`app-update.json`をPagesへ配置します。`main`へのpushだけでは公開しません。手動実行では`main`のオーバーレイを公開できます。リポジトリの「Settings」→「Pages」で、公開元を「GitHub Actions」に設定してください。
 
 #### 使用言語の設定
 

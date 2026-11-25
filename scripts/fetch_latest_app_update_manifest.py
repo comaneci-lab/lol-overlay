@@ -84,6 +84,16 @@ def main():
     if release is None:
         return
 
+    if required:
+        expected_tag = os.environ.get("EXPECTED_RELEASE_TAG")
+        expected_commit = os.environ.get("EXPECTED_RELEASE_COMMIT")
+        if not expected_tag:
+            raise ValueError("The published release tag is missing.")
+        if release.get("tag_name") != expected_tag:
+            raise ValueError("The published release is not the latest release.")
+        if not expected_commit or not COMMIT_PATTERN.fullmatch(expected_commit):
+            raise ValueError("The checked-out release commit is invalid.")
+
     matching_assets = [
         asset
         for asset in release.get("assets", [])
@@ -116,6 +126,8 @@ def main():
         raise ValueError(f"{MANIFEST_NAME} asset is invalid JSON.") from error
 
     manifest = validate_release_manifest(manifest, release)
+    if required and manifest["commit_sha"] != expected_commit:
+        raise ValueError("Application update manifest commit does not match the release commit.")
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(
         json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",

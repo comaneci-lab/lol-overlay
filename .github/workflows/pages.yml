@@ -1,15 +1,6 @@
 name: Publish overlay updater
 
 on:
-  push:
-    branches:
-      - main
-    paths:
-      - "html/**"
-      - "css/**"
-      - "js/**"
-      - "scripts/**"
-      - ".github/workflows/pages.yml"
   release:
     types:
       - published
@@ -32,16 +23,17 @@ jobs:
       artifact_name: github-pages-${{ github.run_attempt }}
     steps:
       - name: Check out source
+        id: checkout
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.event_name == 'release' && github.sha || 'main' }}
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
       - name: Build update site
         env:
-          UPDATE_VERSION: ${{ github.sha }}
+          UPDATE_VERSION: ${{ steps.checkout.outputs.commit }}
         run: |
           mkdir -p _site
           cp -R html css js _site/
@@ -90,6 +82,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REQUIRE_APP_UPDATE_MANIFEST: ${{ github.event_name == 'release' }}
+          EXPECTED_RELEASE_TAG: ${{ github.event.release.tag_name }}
+          EXPECTED_RELEASE_COMMIT: ${{ steps.checkout.outputs.commit }}
         run: python scripts/fetch_latest_app_update_manifest.py _site/app-update.json
 
       - name: Upload Pages artifact

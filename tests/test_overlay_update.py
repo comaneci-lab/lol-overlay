@@ -920,12 +920,51 @@ class OverlayUpdateTests(unittest.TestCase):
         output_path = os.path.join(self.install_root.name, "app-update.json")
         with patch.object(fetcher, "fetch_url", side_effect=fake_fetch_url), patch.dict(
             os.environ,
-            {"GH_TOKEN": "test-token", "REQUIRE_APP_UPDATE_MANIFEST": "true"},
+            {
+                "GH_TOKEN": "test-token",
+                "REQUIRE_APP_UPDATE_MANIFEST": "true",
+                "EXPECTED_RELEASE_TAG": version,
+                "EXPECTED_RELEASE_COMMIT": manifest["commit_sha"],
+            },
         ), patch.object(
             sys, "argv", [script_path, output_path]
         ):
             fetcher.main()
 
+        with open(output_path, encoding="utf-8") as manifest_file:
+            self.assertEqual(json.load(manifest_file), manifest)
+
+        for expected_tag, expected_commit in (
+            ("v1.2.2", manifest["commit_sha"]),
+            (version, "a" * 40),
+            ("", manifest["commit_sha"]),
+            (version, ""),
+        ):
+            with self.subTest(tag=expected_tag, commit=expected_commit):
+                invalid_output = os.path.join(self.install_root.name, "invalid.json")
+                with patch.object(fetcher, "fetch_url", side_effect=fake_fetch_url), patch.dict(
+                    os.environ,
+                    {
+                        "GH_TOKEN": "test-token",
+                        "REQUIRE_APP_UPDATE_MANIFEST": "true",
+                        "EXPECTED_RELEASE_TAG": expected_tag,
+                        "EXPECTED_RELEASE_COMMIT": expected_commit,
+                    },
+                ), patch.object(sys, "argv", [script_path, invalid_output]):
+                    with self.assertRaises(ValueError):
+                        fetcher.main()
+                self.assertFalse(os.path.exists(invalid_output))
+
+        with patch.object(fetcher, "fetch_url", side_effect=fake_fetch_url), patch.dict(
+            os.environ,
+            {
+                "GH_TOKEN": "test-token",
+                "REQUIRE_APP_UPDATE_MANIFEST": "false",
+                "EXPECTED_RELEASE_TAG": "",
+                "EXPECTED_RELEASE_COMMIT": "a" * 40,
+            },
+        ), patch.object(sys, "argv", [script_path, output_path]):
+            fetcher.main()
         with open(output_path, encoding="utf-8") as manifest_file:
             self.assertEqual(json.load(manifest_file), manifest)
 
