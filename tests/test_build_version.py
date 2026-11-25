@@ -18,7 +18,11 @@ class InteractiveBuildVersionTests(unittest.TestCase):
         self.root = Path(self.temp_dir.name)
         scripts = self.root / "scripts"
         scripts.mkdir()
-        for name in ("write_build_version.py", "write_app_update_manifest.py"):
+        for name in (
+            "write_build_version.py",
+            "write_app_update_manifest.py",
+            "check_overlay_line_endings.py",
+        ):
             shutil.copyfile(ROOT / "scripts" / name, scripts / name)
         shutil.copyfile(ROOT / "build.bat", self.root / "build.bat")
         for directory in ("html", "css", "js", "assets", "config"):
@@ -174,6 +178,45 @@ class InteractiveBuildVersionTests(unittest.TestCase):
         self.assertIn("タグを push できませんでした", result.stderr)
         self.assertNotIn("Build complete", result.stdout)
         self.assertEqual(self.git("tag", "--list"), "v1.2.3")
+
+    @unittest.skipUnless(os.name == "nt", "build.bat requires Windows")
+    def test_batch_rejects_non_lf_overlay_before_creating_tag(self):
+        overlay = self.root / "html" / "overlay.html"
+        overlay.write_bytes(b"first\r\nsecond\n")
+        self.git("add", "html/overlay.html")
+        self.commit("add overlay")
+
+        result = self.run_batch("2\nv1.2.3\n", "raise SystemExit(17)\n")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("html/overlay.html", result.stderr.replace("\\", "/"))
+        self.assertEqual(self.git("tag", "--list"), "")
+
+    @unittest.skipUnless(os.name == "nt", "build.bat requires Windows")
+    def test_batch_allows_custom_css_with_crlf(self):
+        custom = self.root / "css" / "custom"
+        custom.mkdir()
+        (custom / "personal.css").write_bytes(b"/* personal */\r\n")
+        result = self.run_batch(
+            "1\n",
+            "from pathlib import Path\n"
+            "Path('dist').mkdir(exist_ok=True)\n"
+            "Path('dist/LoLAPIGet.exe').write_bytes(b'test executable')\n",
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    @unittest.skipUnless(os.name == "nt", "build.bat requires Windows")
+    def test_batch_rejects_non_lf_files_left_in_dist(self):
+        stale = self.root / "dist" / "html"
+        stale.mkdir(parents=True)
+        (stale / "old.html").write_bytes(b"old\r\n")
+        result = self.run_batch(
+            "1\n",
+            "from pathlib import Path\n"
+            "Path('dist/LoLAPIGet.exe').write_bytes(b'test executable')\n",
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("html/old.html", result.stderr.replace("\\", "/"))
+        self.assertNotIn("Build complete", result.stdout)
 
     def test_push_rejects_dirty_or_changed_commit(self):
         self.configure_remote()

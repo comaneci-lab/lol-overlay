@@ -2,6 +2,9 @@
 setlocal
 cd /d "%~dp0"
 
+python scripts\check_overlay_line_endings.py .
+if errorlevel 1 exit /b %errorlevel%
+
 python scripts\write_build_version.py --interactive
 if errorlevel 1 exit /b %errorlevel%
 
@@ -14,6 +17,8 @@ xcopy "css" "dist\css\" /E /I /Y >nul
 if errorlevel 1 exit /b 1
 xcopy "js" "dist\js\" /E /I /Y >nul
 if errorlevel 1 exit /b 1
+python scripts\check_overlay_line_endings.py dist
+if errorlevel 1 exit /b %errorlevel%
 xcopy "assets" "dist\assets\" /E /I /Y >nul
 if errorlevel 1 exit /b 1
 xcopy "config" "dist\config\" /E /I /Y >nul

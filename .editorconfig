@@ -1,0 +1,10 @@
+root = true
+
+[html/**/*.html]
+end_of_line = lf
+
+[css/**/*.css]
+end_of_line = lf
+
+[js/**/*.js]
+end_of_line = lf
