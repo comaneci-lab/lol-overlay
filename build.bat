@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-python scripts\write_build_version.py
+python scripts\write_build_version.py --interactive
 if errorlevel 1 exit /b %errorlevel%
 
 python -m PyInstaller --noconfirm --clean LoLAPIGet.spec

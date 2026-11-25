@@ -1,4 +1,5 @@
 const CHAMPION_SKILLS_GAME_DATA_URL = "/allgamedata";
+const CHAMPION_SKILLS_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const CHAMPION_SKILLS_INDEX_URL = "/champions";
 const CHAMPION_SKILLS_DATA_URL = "/champion";
 const CHAMPION_SKILLS_DATA_DRAGON_VERSION = "16.22.1";
@@ -590,6 +591,26 @@ async function setChampionSkillsManualSelection(championId) {
     }
 }
 
+async function resetChampionSkillsManualLineup() {
+    if (championSkillsCurrentMode !== "manual") return;
+
+    championSkillsManualLineup = createEmptyChampionSkillsLineup();
+    championSkillsPickerTarget = null;
+    championSkillsSearchText = "";
+    championSkillsSelectedTags.clear();
+    championSkillsSetupOpen = true;
+    championSkillsSetupNotice = saveChampionSkillsLineup()
+        ? "全チャンピオンをリセットしました"
+        : "設定を保存できませんでした。再読み込み後に選択が消える可能性があります。";
+
+    try {
+        await renderManualChampionSkillsBoard();
+    } catch (error) {
+        console.error("failed to reset manual champion lineup", error);
+        showChampionSkillsMessage("チャンピオン情報の取得に失敗しました", true);
+    }
+}
+
 function createChampionSkillItem(skill, key, iconUrl) {
     const item = document.createElement("li");
     item.className = "champion-skills-ability";
@@ -815,9 +836,20 @@ function renderChampionSkillsBoard(teams, mode = "live") {
         );
     });
     toolbar.appendChild(setupToggle);
-    board.appendChild(toolbar);
 
-    board.appendChild(createChampionSkillsSetupPanel());
+    if (mode === "manual") {
+        const resetButton = document.createElement("button");
+        resetButton.className = "champion-skills-reset";
+        resetButton.type = "button";
+        resetButton.textContent = "リセット";
+        resetButton.addEventListener("click", async () => {
+            if (!window.confirm("全チャンピオンの設定をリセットします。よろしいですか？")) {
+                return;
+            }
+            await resetChampionSkillsManualLineup();
+        });
+        toolbar.appendChild(resetButton);
+    }
 
     const descriptionToggle = document.createElement("button");
     descriptionToggle.className = "champion-skills-description-toggle";
@@ -844,7 +876,11 @@ function renderChampionSkillsBoard(teams, mode = "live") {
             String(championSkillsDescriptionsVisible)
         );
     });
-    board.appendChild(descriptionToggle);
+    toolbar.appendChild(descriptionToggle);
+
+    board.appendChild(toolbar);
+
+    board.appendChild(createChampionSkillsSetupPanel());
 
     for (const role of CHAMPION_SKILLS_ROLES) {
         for (const team of CHAMPION_SKILLS_TEAMS) {
@@ -923,11 +959,13 @@ async function updateChampionSkills() {
             result = await response.json();
         } catch (error) {
             console.error("failed to fetch champion skills game data", error);
+            championSkillsCanvas.hidden = false;
             await handleChampionSkillsGameUnavailable();
             return;
         }
 
         if (result?.ok !== true) {
+            championSkillsCanvas.hidden = false;
             await handleChampionSkillsGameUnavailable();
             return;
         }
@@ -937,6 +975,7 @@ async function updateChampionSkills() {
             throw new Error("game data response has an invalid allPlayers field");
         }
         if (players.length === 0) {
+            championSkillsCanvas.hidden = false;
             if (championSkillsCurrentMode === "live") {
                 await handleChampionSkillsGameEnded();
             } else if (championSkillsCurrentMode !== "manual") {
@@ -944,6 +983,10 @@ async function updateChampionSkills() {
             }
             return;
         }
+
+        const gameMode = String(result.data?.gameData?.gameMode ?? "").trim().toUpperCase();
+        championSkillsCanvas.hidden = !CHAMPION_SKILLS_ALLOWED_GAME_MODES.includes(gameMode);
+        if (championSkillsCanvas.hidden) return;
 
         championSkillsEndPollFailures = 0;
         if (championSkillsCatalog.length === 0) {

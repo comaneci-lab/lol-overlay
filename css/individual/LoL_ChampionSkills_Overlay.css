@@ -28,16 +28,18 @@ body {
     display: flex;
     grid-column: 1 / -1;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 8px;
 }
 
 .champion-skills-mode-label {
+    margin-right: auto;
     color: rgba(240, 244, 249, 0.72);
     font-size: 12px;
 }
 
 .champion-skills-setup-toggle,
+.champion-skills-reset,
 .champion-skills-manual-edit,
 .champion-skills-picker-close,
 .champion-skills-picker-clear {
@@ -50,6 +52,17 @@ body {
 }
 
 .champion-skills-setup-toggle {
+    padding: 5px 10px;
+}
+
+.champion-skills-setup-toggle,
+.champion-skills-reset,
+.champion-skills-description-toggle {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.champion-skills-reset {
     padding: 5px 10px;
 }
 
@@ -283,8 +296,6 @@ body {
 }
 
 .champion-skills-description-toggle {
-    grid-column: 1 / -1;
-    justify-self: end;
     padding: 5px 10px;
     border: 1px solid rgba(255, 255, 255, 0.24);
     border-radius: 5px;

@@ -1,4 +1,5 @@
 const PLAYER_RUNES_GAME_DATA_URL = "/allgamedata";
+const PLAYER_RUNES_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR"];
 const PLAYER_RUNES_METADATA_URL = "/runes";
 const PLAYER_RUNES_DISPLAY_DURATION = 10000;
 const PLAYER_RUNE_STAT_SHARDS = {
@@ -182,6 +183,8 @@ function renderPlayerRunes(activePlayer, fullRunes, runeMetadata, runeTrees) {
     playerRunesCanvas.hidden = false;
     window.setTimeout(() => {
         playerRunesCanvas.hidden = true;
+        window.clearInterval(playerRunesPollTimer);
+        playerRunesPollTimer = null;
     }, PLAYER_RUNES_DISPLAY_DURATION);
 }
 
@@ -210,7 +213,7 @@ async function loadPlayerRuneMetadata() {
 }
 
 async function updatePlayerRunes() {
-    if (playerRunesUpdateInProgress || playerRunesShown) return;
+    if (playerRunesUpdateInProgress) return;
     playerRunesUpdateInProgress = true;
 
     try {
@@ -222,6 +225,13 @@ async function updatePlayerRunes() {
         const result = await response.json();
         const data = result?.data;
         const events = data?.events?.Events;
+        if (result?.ok === true) {
+            const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
+            const allowed = PLAYER_RUNES_ALLOWED_GAME_MODES.includes(gameMode);
+            playerRunesCanvas.classList.toggle("game-mode-disallowed", !allowed);
+            if (!allowed) return;
+        }
+        if (playerRunesShown) return;
         if (result?.ok !== true || !Array.isArray(events) ||
             !events.some(event => event?.EventName === "GameStart")) {
             return;
@@ -237,8 +247,6 @@ async function updatePlayerRunes() {
         const { runeMetadata, runeTrees } = await loadPlayerRuneMetadata();
         renderPlayerRunes(activePlayer, fullRunes, runeMetadata, runeTrees);
         playerRunesShown = true;
-        window.clearInterval(playerRunesPollTimer);
-        playerRunesPollTimer = null;
     } catch (error) {
         console.error("failed to update player runes overlay", error);
     } finally {

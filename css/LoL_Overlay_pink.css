@@ -15,8 +15,10 @@
     --chart-zero-line: rgba(255, 194, 224, 0.68);
     --chart-ally-line: rgba(255, 128, 189, 1);
     --chart-ally-fill: rgba(255, 117, 187, 0.3);
+    --chart-ally-kill: #b32970;
     --chart-enemy-line: rgba(131, 221, 255, 1);
     --chart-enemy-fill: rgba(91, 205, 255, 0.24);
+    --chart-enemy-kill: #007399;
 }
 
 body {

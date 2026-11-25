@@ -1,4 +1,5 @@
 const OBJECT_TIMER_URL = "/allgamedata";
+const OBJECT_TIMER_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR"];
 const OBJECT_TIMER_LEAD_TIME = 3 * 60;
 
 const OBJECT_TIMER_DEFINITIONS = [
@@ -192,6 +193,13 @@ async function updateObjectTimers() {
                 console.error("invalid game data received for object timers", gameDataResponse);
                 objectTimerInvalidDataLogged = true;
             }
+            return;
+        }
+
+        if (!OBJECT_TIMER_ALLOWED_GAME_MODES.includes(gameMode)) {
+            objectTimerWidget.hidden = true;
+            resetObjectTimerState();
+            objectTimerGameStarted = false;
             return;
         }
 

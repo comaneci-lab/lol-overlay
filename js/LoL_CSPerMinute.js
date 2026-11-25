@@ -1,4 +1,5 @@
 const ACTIVE_PLAYER_CS_URL = "/allgamedata";
+const CS_PER_MINUTE_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const activePlayerCsElement = document.getElementById("active-player-cs");
 
 function getActivePlayerCs(playerData) {
@@ -52,7 +53,8 @@ async function updateActivePlayerCs() {
         }
 
         const playerData = await response.json();
-        if (playerData?.ok !== true) {
+        const gameMode = String(playerData?.data?.gameData?.gameMode ?? "").trim().toUpperCase();
+        if (playerData?.ok !== true || !CS_PER_MINUTE_ALLOWED_GAME_MODES.includes(gameMode)) {
             activePlayerCsElement.hidden = true;
             return;
         }

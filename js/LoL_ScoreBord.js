@@ -1,3 +1,5 @@
+const SCOREBOARD_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
+
 function initializeScoreBoard() {
     // 初期表示
     const initialHtml = `
@@ -195,7 +197,11 @@ function updateScoreBoard(playerDict) {
 }
 
 window.addEventListener("playerdictupdated", () => {
-    if (!liveClientDataAvailable) return;
+    const scoreboard = document.getElementById("ScoreBord");
+    const allowed = SCOREBOARD_ALLOWED_GAME_MODES.includes(currentGameMode);
+    if (scoreboard) scoreboard.hidden = !allowed;
+    if (!allowed) return;
+    if (!liveClientDataAvailable || !gameStarted) return;
     updateScoreBoard(getPlayerDict());
 });
 

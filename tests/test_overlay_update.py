@@ -8,10 +8,12 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import LoLProxy
+from scripts.OBSAdpter import OBSOverlayError
 
 
 class FakeResponse:
@@ -46,6 +48,485 @@ class FakeVariable:
 class FakeButton:
     def state(self, values):
         self.last_state = values
+
+
+class SpectatorEditorTests(unittest.TestCase):
+    def test_editor_stays_visible_and_only_enables_during_spectating(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.attributes("-alpha", 0.0)
+        data = LoLProxy.default_spectator_data()
+        with patch.object(LoLProxy, "get_language_code", return_value="ja_JP"), \
+             patch.object(LoLProxy, "get_spectator_data", return_value=data), \
+             patch.object(LoLProxy, "get_spectator_data_revision", return_value=0), \
+             patch.object(root, "after"), \
+             patch.object(LoLProxy.SpectatorDataEditor, "load_obs_settings", return_value=False), \
+             patch.object(LoLProxy.SpectatorDataEditor, "start_update_checks"), \
+             patch.object(LoLProxy.SpectatorDataEditor, "refresh_live_api"):
+            editor = LoLProxy.SpectatorDataEditor(root)
+
+        editor.tabs.select(1)
+        root.update()
+        self.assertTrue(editor.editor_panel.winfo_ismapped())
+        self.assertFalse(any(
+            isinstance(child, LoLProxy.ttk.Checkbutton)
+            for child in editor.editor_panel.master.winfo_children()
+            for child in child.winfo_children()
+        ))
+        def find_entry(widget):
+            if isinstance(widget, LoLProxy.ttk.Entry):
+                return widget
+            for child in widget.winfo_children():
+                found = find_entry(child)
+                if found is not None:
+                    return found
+            return None
+
+        entry = find_entry(editor.editor_panel)
+        self.assertIsNotNone(entry)
+        self.assertTrue(entry.instate(["disabled"]))
+        with patch.object(LoLProxy, "get_spectator_data", return_value=data), \
+             patch.object(LoLProxy, "get_spectator_data_revision", return_value=0), \
+             patch.object(LoLProxy, "get_current_game_time", return_value=0), \
+             patch.object(LoLProxy, "fetch_lcu", return_value={"ok": True, "data": {}}), \
+             patch.object(LoLProxy, "observe_live_api", return_value=True) as observe, \
+             patch.object(LoLProxy, "is_spectator_game_data", return_value=True) as spectator, \
+             patch.object(root, "after"), \
+             patch.object(editor, "show_save_error"):
+            editor.refresh_live_api()
+            self.assertTrue(entry.instate(["!disabled"]))
+            spectator.return_value = False
+            editor.refresh_live_api()
+            self.assertTrue(entry.instate(["disabled"]))
+            spectator.return_value = True
+            editor.refresh_live_api()
+            self.assertTrue(entry.instate(["!disabled"]))
+            observe.return_value = False
+            editor.refresh_live_api()
+            self.assertTrue(entry.instate(["disabled"]))
+            observe.return_value = True
+            editor.refresh_live_api()
+            self.assertTrue(entry.instate(["!disabled"]))
+            observe.side_effect = ValueError("unavailable")
+            editor.refresh_live_api()
+            self.assertTrue(entry.instate(["disabled"]))
+            self.assertTrue(editor.editor_panel.winfo_ismapped())
+
+    def test_legacy_disabled_setting_does_not_hide_spectator_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = os.path.join(directory, "settings.ini")
+            with open(path, "w", encoding="utf-8") as settings:
+                settings.write("[settings]\nlanguage = ja_JP\nspectator_mode = false\n")
+            manual_data = LoLProxy.default_spectator_data()
+            with patch.object(LoLProxy, "CONFIG_PATH", path), \
+                 patch.object(LoLProxy, "fetch_lcu", return_value={"ok": True, "data": {}}), \
+                 patch.object(LoLProxy, "observe_live_api", return_value=True), \
+                 patch.object(LoLProxy, "get_spectator_data", return_value=manual_data):
+                LoLProxy.initialize_settings()
+                response = LoLProxy.app.test_client().get("/allgamedata")
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.get_json()["data"]["spectatorData"], manual_data)
+
+
+class HtmlFileListTests(unittest.TestCase):
+    def test_selected_tab_is_larger_than_when_unselected(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        root.attributes("-alpha", 0.0)
+        with patch.object(LoLProxy, "get_language_code", return_value="ja_JP"), \
+             patch.object(LoLProxy.SpectatorDataEditor, "load_obs_settings", return_value=False), \
+             patch.object(LoLProxy.SpectatorDataEditor, "refresh_live_api"), \
+             patch.object(LoLProxy.SpectatorDataEditor, "start_update_checks"):
+            editor = LoLProxy.SpectatorDataEditor(root)
+            root.deiconify()
+            root.update()
+            self.assertEqual(
+                [editor.tabs.tab(index, "text") for index in range(4)],
+                ["管理", "観戦", "設定", "更新"],
+            )
+            self.assertEqual(str(editor.obs_port_entry.master), editor.tabs.tabs()[2])
+
+            def tab_width(index):
+                positions = []
+                for x in range(400):
+                    for y in range(60):
+                        try:
+                            if editor.tabs.index(f"@{x},{y}") == index:
+                                positions.append(x)
+                                break
+                        except LoLProxy.tk.TclError:
+                            pass
+                self.assertTrue(positions)
+                return max(positions) - min(positions) + 1
+
+            selected_width = tab_width(0)
+            editor.tabs.select(2)
+            root.update()
+            self.assertGreater(selected_width, tab_width(0))
+
+    def test_lists_html_files_in_case_insensitive_order(self):
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        with tempfile.TemporaryDirectory() as app_dir:
+            html_dir = os.path.join(app_dir, "html")
+            os.makedirs(html_dir)
+            for filename in ("b_overlay.html", "A_overlay.html", "notes.txt"):
+                with open(os.path.join(html_dir, filename), "w", encoding="utf-8"):
+                    pass
+            os.makedirs(os.path.join(html_dir, "not-a-file.html"))
+
+            with patch.object(LoLProxy, "APP_DIR", app_dir):
+                self.assertEqual(
+                    editor.get_html_files(),
+                    ["A_overlay.html", "b_overlay.html"],
+                )
+
+    def test_rows_open_and_copy_their_own_urls_and_scroll(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = root
+        filenames = [f"overlay {index:02}.html" for index in range(30)]
+        editor.get_html_files = Mock(return_value=filenames)
+        tab = LoLProxy.ttk.Frame(root)
+        tab.pack(fill="both", expand=True)
+        editor.create_html_view(tab)
+        root.update_idletasks()
+
+        first_row = editor.html_rows.grid_slaves(row=1, column=0)[0]
+        last_row = editor.html_rows.grid_slaves(row=59, column=0)[0]
+        self.assertEqual(first_row.grid_slaves(row=1, column=0)[0].cget("text"), filenames[0])
+        self.assertEqual(last_row.grid_slaves(row=1, column=0)[0].cget("text"), filenames[-1])
+        first_browser = editor.html_rows.grid_slaves(row=1, column=2)[0]
+        last_browser = editor.html_rows.grid_slaves(row=59, column=2)[0]
+        first_buttons = first_browser.grid_slaves(row=0, column=0)[0]
+        last_buttons = last_browser.grid_slaves(row=0, column=0)[0]
+        with patch.object(editor, "open_file") as open_file, \
+             patch.object(editor, "copy_html_url") as copy_html_url:
+            first_buttons.grid_slaves(row=0, column=0)[0].invoke()
+            last_buttons.grid_slaves(row=0, column=1)[0].invoke()
+        open_file.assert_called_once_with(filenames[0])
+        copy_html_url.assert_called_once_with(filenames[-1])
+
+        self.assertGreater(editor.html_canvas.bbox("all")[3], 100)
+        scrollbar = next(
+            child for child in editor.html_canvas.master.winfo_children()
+            if isinstance(child, LoLProxy.ttk.Scrollbar)
+        )
+        scrollbar.tk.call(scrollbar.cget("command"), "moveto", "1")
+        self.assertGreater(editor.html_canvas.yview()[0], 0)
+        editor.get_html_files.return_value = ["new.html"]
+        editor.refresh_html_files()
+        root.update_idletasks()
+        self.assertEqual(len(editor.obs_buttons), 1)
+        item = editor.html_rows.grid_slaves(row=1, column=0)[0]
+        self.assertEqual(item.grid_slaves(row=1, column=0)[0].cget("text"), "new.html")
+
+    def test_copy_and_open_encode_the_filename(self):
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = Mock()
+        editor.html_status = FakeVariable()
+        filename = "日本語 #1.html"
+        url = "http://127.0.0.1:8888/html/%E6%97%A5%E6%9C%AC%E8%AA%9E%20%231.html"
+        editor.copy_html_url(filename)
+        editor.root.clipboard_append.assert_called_once_with(url)
+        with patch.object(LoLProxy.webbrowser, "open", return_value=True) as open_browser:
+            editor.open_file(filename)
+        open_browser.assert_called_once_with(url)
+
+    def test_refresh_button_notifies_only_after_success(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = root
+        editor.get_html_files = Mock(return_value=["first.html"])
+        tab = LoLProxy.ttk.Frame(root)
+        with patch.object(LoLProxy.messagebox, "showinfo") as showinfo:
+            editor.create_html_view(tab)
+            showinfo.assert_not_called()
+            controls = tab.grid_slaves(row=2, column=0)[0]
+            button = controls.grid_slaves(row=0, column=0)[0]
+            editor.get_html_files.return_value = ["updated.html"]
+            button.invoke()
+            item = editor.html_rows.grid_slaves(row=1, column=0)[0]
+            self.assertEqual(item.grid_slaves(row=1, column=0)[0].cget("text"), "updated.html")
+            showinfo.assert_called_once_with("一覧を更新", "更新完了しました。", parent=root)
+
+            showinfo.reset_mock()
+            editor.get_html_files.return_value = []
+            button.invoke()
+            showinfo.assert_called_once_with("一覧を更新", "更新完了しました。", parent=root)
+            self.assertEqual(editor.html_status.get(), "HTMLファイルが見つかりません。")
+
+            showinfo.reset_mock()
+            editor.get_html_files.side_effect = OSError("read failed")
+            button.invoke()
+            showinfo.assert_not_called()
+            self.assertIn("read failed", editor.html_status.get())
+        root.update_idletasks()
+
+    def test_mouse_wheel_scrolls_over_list_widgets_after_refresh(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        root.geometry("600x250")
+        root.attributes("-alpha", 0.0)
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = root
+        editor.get_html_files = Mock(
+            return_value=[f"overlay{index:02}.html" for index in range(30)]
+        )
+        tab = LoLProxy.ttk.Frame(root)
+        tab.pack(fill="both", expand=True)
+        editor.create_html_view(tab)
+        root.deiconify()
+        root.update()
+        editor.refresh_html_files()
+        root.update()
+
+        widgets = [editor.html_canvas, editor.html_rows]
+        widgets.extend(editor.html_rows.winfo_children()[:7])
+        for widget in widgets:
+            with self.subTest(widget=widget):
+                editor.html_canvas.yview_moveto(0)
+                root.update()
+                widget.event_generate("<MouseWheel>", delta=-120)
+                root.update()
+                self.assertGreater(editor.html_canvas.yview()[0], 0)
+                widget.event_generate("<MouseWheel>", delta=120)
+                root.update()
+                self.assertEqual(editor.html_canvas.yview()[0], 0)
+
+        tab.event_generate("<MouseWheel>", delta=-120)
+        root.update()
+        self.assertEqual(editor.html_canvas.yview()[0], 0)
+
+    def test_obs_buttons_follow_state_and_remain_scoped_to_each_row(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = root
+        editor.get_html_files = Mock(return_value=["a.html", "b.html"])
+        editor.create_html_view(LoLProxy.ttk.Frame(root))
+        editor.obs_active = True
+        editor.obs_state = {
+            "scene": "Scene",
+            "overlays": {
+                "a.html": {"exists": True, "managed": True, "items": [(1, True)]},
+                "b.html": {"exists": False, "managed": False, "items": []},
+            },
+        }
+        editor.update_obs_buttons()
+        first, second = editor.obs_buttons["a.html"], editor.obs_buttons["b.html"]
+        self.assertTrue(first["add"].instate(["disabled"]))
+        self.assertTrue(first["show"].instate(["disabled"]))
+        self.assertFalse(first["hide"].instate(["disabled"]))
+        self.assertFalse(first["delete"].instate(["disabled"]))
+        self.assertFalse(second["add"].instate(["disabled"]))
+        self.assertTrue(second["delete"].instate(["disabled"]))
+        with patch.object(editor, "start_obs_action") as action:
+            first["hide"].invoke()
+            second["add"].invoke()
+        self.assertEqual(action.call_args_list[0].args, ("hide", "a.html"))
+        self.assertEqual(action.call_args_list[1].args, ("add", "b.html"))
+        editor.obs_state["overlays"]["a.html"] = {
+            "exists": True, "managed": False, "items": []
+        }
+        editor.update_obs_buttons()
+        self.assertTrue(all(button.instate(["disabled"]) for button in first.values()))
+        root.update_idletasks()
+
+    def test_delete_is_cancelled_if_state_changes_during_confirmation(self):
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = Mock()
+        editor.obs_busy = False
+        editor.obs_active = True
+        editor.obs_state = {"scene": "First"}
+
+        def change_scene(*_args, **_kwargs):
+            editor.obs_state = {"scene": "Second"}
+            return True
+
+        with patch.object(LoLProxy.messagebox, "askyesno", side_effect=change_scene), \
+             patch.object(LoLProxy.messagebox, "showerror") as showerror, \
+             patch.object(editor, "start_obs_request") as request:
+            editor.start_obs_action("delete", "a.html")
+        request.assert_not_called()
+        showerror.assert_called_once()
+
+    def test_missing_html_refreshes_list_after_add_error(self):
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = Mock()
+        editor.obs_busy = False
+        editor.obs_active = True
+        editor.obs_state = {"scene": "Scene"}
+        with patch.object(LoLProxy.os.path, "isfile", return_value=False), \
+             patch.object(LoLProxy.messagebox, "showerror") as showerror, \
+             patch.object(editor, "refresh_html_files") as refresh:
+            editor.start_obs_action("add", "missing.html")
+        showerror.assert_called_once()
+        refresh.assert_called_once_with()
+
+    def test_invalid_size_config_blocks_add_but_not_other_actions(self):
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = Mock()
+        editor.obs_busy = False
+        editor.obs_active = True
+        editor.obs_state = {"scene": "Scene"}
+        with patch.object(LoLProxy.os.path, "isfile", return_value=True), \
+             patch.object(LoLProxy, "get_overlay_size", side_effect=LoLProxy.OverlaySizeConfigError("bad config")), \
+             patch.object(LoLProxy.messagebox, "showerror") as showerror, \
+             patch.object(editor, "start_obs_request") as request:
+            editor.start_obs_action("add", "a.html")
+            showerror.assert_called_once()
+            self.assertIn("bad config", showerror.call_args.args[1])
+            request.assert_not_called()
+            editor.start_obs_action("hide", "a.html")
+            request.assert_called_once_with("hide", "a.html", notify_error=True, dimensions=None)
+
+    def test_obs_connection_and_add_update_buttons(self):
+        try:
+            root = LoLProxy.tk.Tk()
+        except LoLProxy.tk.TclError as error:
+            self.skipTest(f"Tk is unavailable: {error}")
+        self.addCleanup(root.destroy)
+        root.withdraw()
+        editor = object.__new__(LoLProxy.SpectatorDataEditor)
+        editor.root = root
+        editor.get_html_files = Mock(return_value=["a.html"])
+        editor.create_html_view(LoLProxy.ttk.Frame(root))
+        with patch.object(editor, "load_obs_settings", return_value=False):
+            editor.create_obs_settings_view(LoLProxy.ttk.Frame(root))
+        before = {"scene": "Scene", "overlays": {
+            "a.html": {"exists": False, "managed": False, "items": []}
+        }}
+        after = {"scene": "Scene", "overlays": {
+            "a.html": {"exists": True, "managed": True, "items": [(7, True)]}
+        }}
+        changed = {"scene": "Scene", "overlays": {
+            "a.html": {"exists": True, "managed": True, "items": [(7, False)]}
+        }}
+        adapter = Mock()
+        adapter.get_overlay_state.side_effect = [before, before, after, changed, after, before, after]
+        context = Mock()
+        context.__enter__ = Mock(return_value=adapter)
+        context.__exit__ = Mock(return_value=False)
+
+        def wait_for_request():
+            deadline = time.monotonic() + 3
+            while editor.obs_busy and time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.01)
+            self.assertFalse(editor.obs_busy)
+
+        with tempfile.TemporaryDirectory() as app_dir, \
+             patch.object(LoLProxy, "APP_DIR", app_dir), \
+             patch.object(LoLProxy, "OVERLAY_SIZE_CONFIG_PATH", os.path.join(app_dir, "sizes.json")), \
+             patch.object(editor, "load_saved_obs_password"), \
+             patch.object(LoLProxy, "save_obs_port") as save_port, \
+             patch.object(LoLProxy, "save_obs_password") as save_password, \
+             patch.object(LoLProxy.messagebox, "askyesno", return_value=True) as confirm_save, \
+             patch.object(LoLProxy, "OBSOverlayAdapter", return_value=context):
+            os.makedirs(os.path.join(app_dir, "html"))
+            with open(os.path.join(app_dir, "html", "a.html"), "w", encoding="utf-8"):
+                pass
+            config = {
+                "schema": 1,
+                "default": {"width": 1920, "height": 1080},
+                "overlays": [{"file": "a.html", "width": 320, "height": 240, "description": ""}],
+            }
+            with open(LoLProxy.OVERLAY_SIZE_CONFIG_PATH, "w", encoding="utf-8") as file:
+                json.dump(config, file)
+            editor.obs_password.set("temporary")
+            editor.toggle_obs_connection()
+            wait_for_request()
+            save_port.assert_called_once_with(4455)
+            confirm_save.assert_called_once()
+            save_password.assert_called_once_with("temporary")
+            self.assertFalse(editor.obs_buttons["a.html"]["add"].instate(["disabled"]))
+            deadline = time.monotonic() + 3.2
+            while time.monotonic() < deadline:
+                root.update()
+                time.sleep(0.01)
+            self.assertEqual(adapter.get_overlay_state.call_count, 1)
+            editor.start_obs_request()
+            wait_for_request()
+            save_port.assert_called_once()
+            confirm_save.assert_called_once()
+            editor.obs_buttons["a.html"]["add"].invoke()
+            wait_for_request()
+            adapter.apply_overlay_action.assert_called_once_with(
+                "add", "a.html", before, (320, 240)
+            )
+            self.assertTrue(editor.obs_buttons["a.html"]["add"].instate(["disabled"]))
+            self.assertFalse(editor.obs_buttons["a.html"]["hide"].instate(["disabled"]))
+            config["overlays"][0]["width"] = 640
+            with open(LoLProxy.OVERLAY_SIZE_CONFIG_PATH, "w", encoding="utf-8") as file:
+                json.dump(config, file)
+            for action, error, expected, enabled_action in (
+                ("hide", "既に非表示です", changed, "show"),
+                ("show", "既に表示されています", after, "hide"),
+                ("delete", "ソースがありません", before, "add"),
+                ("add", "同名のソースが既に存在します", after, "hide"),
+            ):
+                with self.subTest(action=action), \
+                     patch.object(LoLProxy.messagebox, "askyesno", return_value=True), \
+                     patch.object(LoLProxy.messagebox, "showerror") as showerror, \
+                     patch.object(LoLProxy.logging, "exception"):
+                    adapter.apply_overlay_action.side_effect = OBSOverlayError(error)
+                    editor.obs_buttons["a.html"][action].invoke()
+                    wait_for_request()
+                    showerror.assert_called_once()
+                    self.assertIn(error, showerror.call_args.args[1])
+                    self.assertTrue(editor.obs_active)
+                    self.assertEqual(editor.obs_state, expected)
+                    self.assertFalse(editor.obs_buttons["a.html"][enabled_action].instate(["disabled"]))
+            self.assertEqual(adapter.apply_overlay_action.call_args.args[3], (640, 240))
+            save_port.assert_called_once()
+            save_password.assert_called_once()
+            confirm_save.assert_called_once()
+            editor.toggle_obs_connection()
+            self.assertEqual(editor.obs_password.get(), "")
+            self.assertTrue(editor.obs_buttons["a.html"]["hide"].instate(["disabled"]))
+            editor.obs_password.set("wrong")
+            context.__enter__.side_effect = ValueError("OBS unavailable")
+            with patch.object(LoLProxy.messagebox, "showerror") as showerror, \
+                 patch.object(LoLProxy.logging, "exception"):
+                editor.toggle_obs_connection()
+                wait_for_request()
+            showerror.assert_called_once()
+            self.assertFalse(editor.obs_active)
+            self.assertFalse(editor.obs_port_entry.instate(["disabled"]))
+            save_port.assert_called_once()
+            save_password.assert_called_once()
+            confirm_save.assert_called_once()
+            editor.obs_port.set("0")
+            with patch.object(LoLProxy.messagebox, "showerror") as showerror:
+                editor.toggle_obs_connection()
+            showerror.assert_called_once()
+            save_port.assert_called_once()
+            confirm_save.assert_called_once()
 
 
 class OverlayUpdateTests(unittest.TestCase):
@@ -651,6 +1132,12 @@ class DataDragonUpdateTests(unittest.TestCase):
         self.assertEqual(result["latest_version"], "16.23.1")
         self.assertTrue(result["update_available"])
 
+        for mapping in self.config["directories"]:
+            directory = os.path.join(self.install_root.name, "assets", mapping["destination"])
+            os.makedirs(directory)
+            with open(os.path.join(directory, "sample.bin"), "wb") as file:
+                file.write(b"asset")
+
         with patch.object(
             LoLProxy,
             "get_installed_data_dragon_version",
@@ -662,6 +1149,51 @@ class DataDragonUpdateTests(unittest.TestCase):
         ):
             result = LoLProxy.check_data_dragon_update()
         self.assertFalse(result["update_available"])
+
+    def test_missing_centered_assets_allow_updating_the_same_version(self):
+        for mapping in self.config["directories"]:
+            if mapping["destination"] == "centered":
+                continue
+            directory = os.path.join(self.install_root.name, "assets", mapping["destination"])
+            os.makedirs(directory)
+            with open(os.path.join(directory, "sample.bin"), "wb") as file:
+                file.write(b"asset")
+        with patch.object(
+            LoLProxy, "get_installed_data_dragon_version", return_value=self.version
+        ), patch.object(
+            LoLProxy, "fetch_latest_data_dragon_version", return_value=self.version
+        ):
+            result = LoLProxy.check_data_dragon_update()
+            os.makedirs(os.path.join(self.install_root.name, "assets", "centered"))
+            empty_result = LoLProxy.check_data_dragon_update()
+        self.assertTrue(result["update_available"])
+        self.assertEqual(result["missing_asset_directories"], ["centered"])
+        self.assertTrue(empty_result["update_available"])
+        self.assertEqual(empty_result["missing_asset_directories"], ["centered"])
+
+        editor = LoLProxy.SpectatorDataEditor.__new__(LoLProxy.SpectatorDataEditor)
+        editor.data_dragon_update_button = FakeButton()
+        editor.data_dragon_update_status = FakeVariable()
+        editor.finish_data_dragon_update_check(result, None)
+        self.assertEqual(editor.data_dragon_update_button.last_state, ["!disabled"])
+        self.assertIn("centered", editor.data_dragon_update_status.value)
+
+    def test_missing_assets_do_not_allow_downgrading_a_newer_version(self):
+        with patch.object(
+            LoLProxy, "get_installed_data_dragon_version", return_value="16.24.1"
+        ), patch.object(
+            LoLProxy, "fetch_latest_data_dragon_version", return_value=self.version
+        ):
+            result = LoLProxy.check_data_dragon_update()
+        self.assertFalse(result["update_available"])
+        self.assertIn("centered", result["missing_asset_directories"])
+
+        editor = LoLProxy.SpectatorDataEditor.__new__(LoLProxy.SpectatorDataEditor)
+        editor.data_dragon_update_button = FakeButton()
+        editor.data_dragon_update_status = FakeVariable()
+        editor.finish_data_dragon_update_check(result, None)
+        self.assertEqual(editor.data_dragon_update_button.last_state, ["disabled"])
+        self.assertIn("centered", editor.data_dragon_update_status.value)
 
     def test_latest_data_dragon_version_disables_update_button(self):
         editor = LoLProxy.SpectatorDataEditor.__new__(LoLProxy.SpectatorDataEditor)
@@ -709,7 +1241,11 @@ class DataDragonUpdateTests(unittest.TestCase):
     def test_updates_configured_assets_and_invalidates_only_language_caches(self):
         assets_root = os.path.join(self.install_root.name, "assets")
         champion_directory = os.path.join(assets_root, "champion")
+        centered_directory = os.path.join(assets_root, "centered")
         os.makedirs(champion_directory)
+        os.makedirs(centered_directory)
+        with open(os.path.join(centered_directory, "custom.jpg"), "wb") as file:
+            file.write(b"custom-centered")
         with open(os.path.join(champion_directory, "sample_0.bin"), "wb") as file:
             file.write(b"old-version")
         with open(os.path.join(champion_directory, "custom.png"), "wb") as file:
@@ -741,6 +1277,18 @@ class DataDragonUpdateTests(unittest.TestCase):
             self.assertEqual(file.read(), b"updated-0")
         with open(os.path.join(champion_directory, "custom.png"), "rb") as file:
             self.assertEqual(file.read(), b"custom")
+        centered_index = next(
+            index for index, mapping in enumerate(self.config["directories"])
+            if mapping == {
+                "source_root": "shared",
+                "source": "champion/centered",
+                "destination": "centered",
+            }
+        )
+        with open(os.path.join(centered_directory, f"sample_{centered_index}.bin"), "rb") as file:
+            self.assertEqual(file.read(), f"updated-{centered_index}".encode("ascii"))
+        with open(os.path.join(centered_directory, "custom.jpg"), "rb") as file:
+            self.assertEqual(file.read(), b"custom-centered")
         self.assertFalse(os.path.exists(os.path.join(self.json_root, "ja_JP")))
         self.assertFalse(os.path.exists(os.path.join(self.json_root, "en_US")))
         with open(spectator_path) as file:
@@ -792,6 +1340,68 @@ class DataDragonUpdateTests(unittest.TestCase):
 
         self.assertTrue(result.get_json()["ok"])
         self.assertIn(f"/cdn/{self.version}/data/ja_JP/item.json", get.call_args[0][0])
+
+    def test_static_and_champion_routes_share_cache_and_error_handling(self):
+        response = FakeResponse(b"", json_data={"data": {"example": 1}})
+        client = LoLProxy.app.test_client()
+        with patch.object(LoLProxy, "get_language_code", return_value="ja_JP"), \
+             patch.object(LoLProxy.requests, "get", return_value=response) as get:
+            for url, cache_parts, remote_file in (
+                ("/items", ("ja_JP", "item.json"), "item.json"),
+                ("/champion/Ahri", ("ja_JP", "champion", "Ahri.json"), "champion/Ahri.json"),
+            ):
+                with self.subTest(url=url):
+                    result = client.get(url)
+                    self.assertEqual(result.status_code, 200)
+                    self.assertEqual(result.get_json()["data"], {"data": {"example": 1}})
+                    self.assertTrue(get.call_args.args[0].endswith(f"/ja_JP/{remote_file}"))
+                    self.assertTrue(os.path.isfile(os.path.join(self.json_root, *cache_parts)))
+                    get.reset_mock()
+                    self.assertEqual(client.get(url).status_code, 200)
+                    get.assert_not_called()
+                    with open(os.path.join(self.json_root, *cache_parts), "w", encoding="utf-8") as cache:
+                        cache.write("{")
+                    self.assertEqual(client.get(url).status_code, 500)
+                    get.assert_not_called()
+            self.assertEqual(client.get("/champion/not-valid").status_code, 400)
+            get.assert_not_called()
+
+    def test_invalid_download_can_be_retried_without_corrupting_cache(self):
+        client = LoLProxy.app.test_client()
+        for url, cache_parts in (
+            ("/items", ("ja_JP", "item.json")),
+            ("/champion/Ahri", ("ja_JP", "champion", "Ahri.json")),
+        ):
+            with self.subTest(url=url):
+                bad_response = FakeResponse(b"")
+                bad_response.json = Mock(side_effect=ValueError("invalid JSON"))
+                good_response = FakeResponse(b"", json_data={"data": {}})
+                with patch.object(LoLProxy, "get_language_code", return_value="ja_JP"), \
+                     patch.object(LoLProxy.requests, "get", side_effect=[bad_response, good_response]):
+                    self.assertEqual(client.get(url).status_code, 500)
+                    cache_path = os.path.join(self.json_root, *cache_parts)
+                    self.assertFalse(os.path.exists(cache_path))
+                    self.assertEqual(client.get(url).status_code, 200)
+                    with open(cache_path, encoding="utf-8") as cache:
+                        self.assertEqual(json.load(cache), {"data": {}})
+
+    def test_failed_cache_write_leaves_no_partial_file(self):
+        response = FakeResponse(b"", json_data={"data": {}})
+        client = LoLProxy.app.test_client()
+        with patch.object(LoLProxy, "get_language_code", return_value="ja_JP"), \
+             patch.object(LoLProxy.requests, "get", return_value=response), \
+             patch.object(LoLProxy.os, "replace", side_effect=OSError("write failed")):
+            result = client.get("/champion/Ahri")
+        self.assertEqual(result.status_code, 500)
+        self.assertIn("write failed", result.get_json()["error"])
+        self.assertEqual(os.listdir(os.path.join(self.json_root, "ja_JP", "champion")), [])
+
+    def test_cache_directory_error_returns_json_error(self):
+        with patch.object(LoLProxy, "get_language_code", return_value="ja_JP"), \
+             patch.object(LoLProxy.os, "makedirs", side_effect=OSError("directory error")):
+            response = LoLProxy.app.test_client().get("/items")
+        self.assertEqual(response.status_code, 500)
+        self.assertIn("directory error", response.get_json()["error"])
 
     def test_data_dragon_button_requires_confirmation_before_starting(self):
         editor = LoLProxy.SpectatorDataEditor.__new__(LoLProxy.SpectatorDataEditor)

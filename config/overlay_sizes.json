@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "default": {"width": 800, "height": 600},
+  "overlays": [
+    {"file": "LoL_Overlay_Landscape.html", "width": 1920, "height": 1080, "description": "横型の全体オーバーレイ"},
+    {"file": "LoL_Overlay_Portrait.html", "width": 1080, "height": 1920, "description": "縦型の全体オーバーレイ"},
+    {"file": "LoL_PlayerRunes_Overlay.html", "width": 800, "height": 300, "description": "ルーン・シャード表示用オーバーレイ"},
+    {"file": "LoL_GoldChart_Overlay.html", "width": 504, "height": 210, "description": "ゴールドチャートとイベント"},
+    {"file": "LoL_Scoreboard_Overlay.html", "width": 720, "height": 250, "description": "スコアボード"},
+    {"file": "LoL_TopBar_Overlay.html", "width": 850, "height": 130, "description": "内容に合わせたサイズ。OBSプレビューを見て調整"},
+    {"file": "LoL_RoleGoldDiff_Overlay.html", "width": 240, "height": 200, "description": "高さは表示内容に合わせて調整"},
+    {"file": "LoL_ObjectTimer_Overlay.html", "width": 120, "height": 200, "description": "表示されるタイマー数に合わせて調整"},
+    {"file": "LoL_SkillLevelUp_Overlay.html", "width": 600, "height": 220, "description": "スキル・アイテムの通知アイコンに合わせて調整"},
+    {"file": "LoL_MatchOrder_Overlay.html", "width": 640, "height": 390, "description": "試合終了後にアイテム・スキルオーダーを表示"},
+    {"file": "LoL_PostGameThumbnail_Overlay.html", "width": 1920, "height": 1080, "description": "試合終了後のサムネイル用画面"},
+    {"file": "LoL_ChampionMap_Overlay.html", "width": 300, "height": 300, "description": "ミニマップ上に配置する全画面オーバーレイ"},
+    {"file": "LoL_CSPerMinute_Overlay.html", "width": 90, "height": 40, "description": "内容に合わせたサイズ。OBSプレビューを見て調整"},
+    {"file": "LoL_GameStartSplash_Overlay.html", "width": 1920, "height": 1080, "description": "試合開始時に両チームのスプラッシュアートを順番に表示"}
+  ]
+}

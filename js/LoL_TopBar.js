@@ -1,3 +1,5 @@
+const TOPBAR_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR"];
+
 const topbarMarkup = `
     <div class="topbar-widget" hidden>
         <div class="topbar">
@@ -229,7 +231,7 @@ async function refreshTopbar() {
                 topbarWidget.hidden = true;
                 return;
             }
-            topbarWidget.hidden = !["CLASSIC", "PRACTICETOOL", "SPECTATOR"].includes(gameMode);
+            topbarWidget.hidden = !TOPBAR_ALLOWED_GAME_MODES.includes(gameMode);
             if (topbarWidget.hidden) return;
 
             gameTime = gameDataResponse.data?.gameData?.gametime

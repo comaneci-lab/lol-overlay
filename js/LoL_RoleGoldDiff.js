@@ -1,3 +1,4 @@
+const ROLE_GOLD_DIFF_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR"];
 const roleGoldDiffPositions = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 
 const roleGoldDiffPositionAliases = {
@@ -89,6 +90,10 @@ function updateRoleGoldDiff(playerDict) {
 }
 
 window.addEventListener("playerdictupdated", () => {
+    const container = document.getElementById("RoleGoldDiff");
+    const allowed = ROLE_GOLD_DIFF_ALLOWED_GAME_MODES.includes(currentGameMode);
+    if (container) container.hidden = !allowed;
+    if (!allowed) return;
     if (!liveClientDataAvailable) return;
     updateRoleGoldDiff(getPlayerDict());
 });

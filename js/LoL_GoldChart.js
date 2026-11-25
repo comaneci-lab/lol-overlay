@@ -1,14 +1,178 @@
+const GOLD_CHART_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
+
 // ゴールドチャート用変数
 let timeData = [];
 let goldDiffData = [];
-let startTime = null;
 let hadValidData = false;
+let goldChartWarnings = new Set();
 
-const INITIAL_TIME_WIDTH = 120;
-const MAX_TIME_FIXED = 600;
+const INITIAL_TIME_WIDTH = 25 * 60;
+const TIME_AXIS_STEP = 60;
+const TIME_TICK_STEP = 5 * 60;
 const INITIAL_Y_RANGE = 5000;
+const GOLD_AXIS_STEP = 1000;
+const GOLD_CHART_KILL_INTERVAL = 30;
+const GOLD_CHART_EVENT_SIZE = 24;
+const GOLD_CHART_EVENT_ICONS = {
+    TurretKilled: "../assets/icon_tower.png",
+    HordeKill: "../assets/icon_voidclub.png",
+    DragonKill: "../assets/icon_dragon.png",
+    HeraldKill: "../assets/icon_herald.png",
+    BaronKill: "../assets/icon_baron.png"
+};
+const GOLD_CHART_EVENT_NAMES = {
+    ChampionKill: "チャンピオンキル",
+    TurretKilled: "タワー",
+    HordeKill: "ヴォイドグラブ",
+    DragonKill: "ドラゴン",
+    HeraldKill: "ヘラルド",
+    BaronKill: "バロン"
+};
 const PLOTLY_SCRIPT_URL = "https://cdn.plot.ly/plotly-2.26.0.min.js";
 let plotlyLoadPromise = null;
+
+function warnGoldChartOnce(key, message, value) {
+    if (goldChartWarnings.has(key)) return;
+    goldChartWarnings.add(key);
+    console.warn(message, value);
+}
+
+function getGoldChartEventTeam(event, teams) {
+    const killer = typeof event.KillerName === "string" ? event.KillerName.trim().toLowerCase() : "";
+    const reportedTeam = event.KillerTeam;
+    const team = reportedTeam === "ORDER" || reportedTeam === "CHAOS"
+        ? reportedTeam
+        : teams[killer] ?? teams[killer.split("#", 1)[0]];
+    if (team === "ORDER" || team === "CHAOS") return team;
+
+    if (event.EventName === "TurretKilled" && typeof event.TurretKilled === "string") {
+        const turretTeam = event.TurretKilled.match(/^Turret_T(Order|Chaos)_/i)?.[1]?.toUpperCase();
+        if (turretTeam === "ORDER") return "CHAOS";
+        if (turretTeam === "CHAOS") return "ORDER";
+    }
+    return null;
+}
+
+function getGoldChartEvents(events, players) {
+    const result = { ORDER: [], CHAOS: [] };
+    const killGroups = new Map();
+    const seen = new Set();
+    const teams = makePlayerTeamMap(players);
+
+    for (const [index, event] of events.entries()) {
+        if (!Object.prototype.hasOwnProperty.call(GOLD_CHART_EVENT_NAMES, event?.EventName)) continue;
+        const key = event.EventID != null ? `id:${event.EventID}` : `index:${index}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        const team = getGoldChartEventTeam(event, teams);
+        const time = event.EventTime == null ? NaN : Number(event.EventTime);
+        if (!team || !Number.isFinite(time) || time < 0) {
+            warnGoldChartOnce(key, "ゴールドチャート: チームまたは時刻を特定できないイベントを表示できません", event);
+            continue;
+        }
+
+        if (event.EventName === "ChampionKill") {
+            const groupKey = `${team}:${Math.floor(time / GOLD_CHART_KILL_INTERVAL)}`;
+            const group = killGroups.get(groupKey);
+            if (group) {
+                group.count++;
+                group.time = Math.min(group.time, time);
+            } else {
+                const marker = { time, name: event.EventName, count: 1 };
+                killGroups.set(groupKey, marker);
+                result[team].push(marker);
+            }
+        } else {
+            result[team].push({ time, name: event.EventName, count: 1 });
+        }
+    }
+    return result;
+}
+
+function renderGoldChartEvents(events, players) {
+    const container = document.getElementById("goldChartEvents");
+    if (!container) return;
+
+    const markersByTeam = getGoldChartEvents(events, players);
+    const rangeEnd = chartLayout.xaxis.range[1];
+    container.replaceChildren();
+
+    for (const team of ["ORDER", "CHAOS"]) {
+        const ally = window.isSpectatorMode ? team === "ORDER" : team === window.myTeam;
+        const row = document.createElement("div");
+        row.className = "gold-chart-event-row";
+        row.style.background = ally
+            ? getChartThemeColor('--chart-ally-fill', 'rgba(102,179,255,0.25)')
+            : getChartThemeColor('--chart-enemy-fill', 'rgba(255,102,102,0.25)');
+
+        const label = document.createElement("div");
+        label.className = "gold-chart-event-label";
+        label.textContent = team;
+        const timeline = document.createElement("div");
+        timeline.className = "gold-chart-event-timeline";
+        row.append(label, timeline);
+        container.appendChild(row);
+
+        const width = timeline.clientWidth;
+        if (width <= 0) continue;
+        const markers = markersByTeam[team].sort((a, b) =>
+            (a.name === "ChampionKill" ? 0 : 1) - (b.name === "ChampionKill" ? 0 : 1)
+            || a.time - b.time
+        );
+        for (const marker of markers) {
+            const x = Math.max(GOLD_CHART_EVENT_SIZE / 2,
+                Math.min(width - GOLD_CHART_EVENT_SIZE / 2, marker.time / rangeEnd * width));
+
+            const element = document.createElement("div");
+            element.className = "gold-chart-event-marker";
+            element.style.left = `${x}px`;
+            element.style.top = "3px";
+            const minutes = Math.floor(marker.time / 60);
+            const seconds = Math.floor(marker.time % 60);
+            element.title = `${minutes}:${String(seconds).padStart(2, "0")} ${GOLD_CHART_EVENT_NAMES[marker.name]}`
+                + (marker.count > 1 ? ` ×${marker.count}（30秒間）` : "");
+
+            if (marker.name === "ChampionKill") {
+                const dot = document.createElement("span");
+                dot.className = "gold-chart-kill-dot";
+                const size = Math.min(6 + (marker.count - 1) * 2, 18);
+                dot.style.width = `${size}px`;
+                dot.style.height = `${size}px`;
+                dot.style.background = ally
+                    ? getChartThemeColor('--chart-ally-kill', '#0066b3')
+                    : getChartThemeColor('--chart-enemy-kill', '#b42020');
+                element.appendChild(dot);
+            } else {
+                const icon = document.createElement("img");
+                icon.src = GOLD_CHART_EVENT_ICONS[marker.name];
+                icon.alt = GOLD_CHART_EVENT_NAMES[marker.name];
+                element.appendChild(icon);
+            }
+            timeline.appendChild(element);
+        }
+    }
+}
+
+function updateGoldChartTimeTicks(rangeEnd) {
+    chartLayout.xaxis.tickvals = [];
+    chartLayout.xaxis.ticktext = [];
+    for (let time = 0; time <= rangeEnd; time += TIME_TICK_STEP) {
+        chartLayout.xaxis.tickvals.push(time);
+        chartLayout.xaxis.ticktext.push(`${time / 60}分`);
+    }
+}
+
+function updateGoldChartGoldTicks(rangeEnd) {
+    const labelStep = Math.ceil(2 * rangeEnd / GOLD_AXIS_STEP / 8) * GOLD_AXIS_STEP;
+    chartLayout.yaxis.tickvals = [];
+    chartLayout.yaxis.ticktext = [];
+    for (let gold = -rangeEnd; gold <= rangeEnd; gold += GOLD_AXIS_STEP) {
+        chartLayout.yaxis.tickvals.push(gold);
+        chartLayout.yaxis.ticktext.push(gold % labelStep === 0
+            ? (gold === 0 ? "0" : `${gold / GOLD_AXIS_STEP}k`)
+            : "");
+    }
+}
 
 function getChartThemeColor(name, fallback) {
     const value = getComputedStyle(document.documentElement)
@@ -63,13 +227,13 @@ async function initializeChart() {
     const plotly = await loadPlotly();
     const gridColor = getChartThemeColor('--chart-grid', '#444');
     const axisColor = getChartThemeColor('--chart-axis', '#ccc');
-    const chartBackground = getChartThemeColor('--chart-background', 'rgba(0,0,0,0.9)');
     chartLayout = {
         xaxis: {
             gridcolor: gridColor,
             showgrid: true,
             zeroline: false,
             color: axisColor,
+            tickmode: 'array',
             range: [0, INITIAL_TIME_WIDTH]
         },
         yaxis: {
@@ -77,12 +241,13 @@ async function initializeChart() {
             showgrid: true,
             zeroline: true,
             color: axisColor,
+            tickmode: 'array',
+            dtick: GOLD_AXIS_STEP,
             range: [-INITIAL_Y_RANGE, INITIAL_Y_RANGE]
         },
 
-        // ★ 完全透明（OBS と馴染む）
-        plot_bgcolor: chartBackground,
-        paper_bgcolor: chartBackground,
+        plot_bgcolor: 'rgba(0,0,0,0)',
+        paper_bgcolor: 'rgba(0,0,0,0)',
 
         // ★ 余白を最小化
         margin: { l: 40, r: 20, t: 10, b: 30 },
@@ -96,7 +261,7 @@ async function initializeChart() {
                 type: 'line',
                 x0: 0,
                 y0: 0,
-                x1: MAX_TIME_FIXED,
+                x1: INITIAL_TIME_WIDTH,
                 y1: 0,
                 xref: 'x',
                 yref: 'y',
@@ -114,19 +279,24 @@ async function initializeChart() {
         displayModeBar: false
     };
 
+    updateGoldChartTimeTicks(INITIAL_TIME_WIDTH);
+    updateGoldChartGoldTicks(INITIAL_Y_RANGE);
     await plotly.newPlot('goldChart', [], chartLayout, config);
 }
 
 
 // 区間トレースを作成（0 補間対応）
-function makeTrace(start, end, sign, zeroX = null, zeroY = null) {
+function makeTrace(start, end, sign, startZeroX = null, endZeroX = null) {
     let x = timeData.slice(start, end + 1);
     let y = goldDiffData.slice(start, end + 1);
 
-    // 0 補間点がある場合は追加
-    if (zeroX !== null) {
-        x = [...x, zeroX];
-        y = [...y, zeroY];
+    if (startZeroX !== null) {
+        x = [startZeroX, ...x];
+        y = [0, ...y];
+    }
+    if (endZeroX !== null) {
+        x = [...x, endZeroX];
+        y = [...y, 0];
     }
 
     const allyColor = getChartThemeColor('--chart-ally-line', 'rgba(102,179,255,1)');
@@ -171,13 +341,9 @@ function updateAxes() {
     const maxTime = Math.max(...timeData);
 
     // X軸
-    let xRange;
-    if (maxTime > MAX_TIME_FIXED) {
-        xRange = [0, maxTime + 100];
-    } else {
-        xRange = [0, Math.max(maxTime + 60, INITIAL_TIME_WIDTH)];
-    }
+    const xRange = [0, Math.max(INITIAL_TIME_WIDTH, (Math.floor(maxTime / TIME_AXIS_STEP) + 1) * TIME_AXIS_STEP)];
     chartLayout.xaxis.range = xRange;
+    updateGoldChartTimeTicks(xRange[1]);
 
     // 0ライン
     chartLayout.shapes = chartLayout.shapes.map(shape => {
@@ -191,16 +357,10 @@ function updateAxes() {
     const minGoldDiff = Math.min(...goldDiffData);
     const maxGoldDiff = Math.max(...goldDiffData);
 
-    let yMin = -INITIAL_Y_RANGE ;
-    let yMax = INITIAL_Y_RANGE ;
-
-    if (minGoldDiff < yMin || maxGoldDiff > yMax) {
-        const absMax = Math.max(Math.abs(minGoldDiff), Math.abs(maxGoldDiff));
-        const expanded = Math.ceil(absMax / 5000) * 5000;
-        yMin = -expanded;
-        yMax = expanded;
-    }
-    chartLayout.yaxis.range = [yMin, yMax];
+    const absMax = Math.max(Math.abs(minGoldDiff), Math.abs(maxGoldDiff));
+    const yMax = Math.max(INITIAL_Y_RANGE, (Math.floor(absMax / GOLD_AXIS_STEP) + 1) * GOLD_AXIS_STEP);
+    chartLayout.yaxis.range = [-yMax, yMax];
+    updateGoldChartGoldTicks(yMax);
 }
 
 function resetGoldChart() {
@@ -208,13 +368,16 @@ function resetGoldChart() {
 
     timeData = [];
     goldDiffData = [];
-    startTime = null;
     hadValidData = false;
+    goldChartWarnings.clear();
+    document.getElementById("goldChartEvents")?.replaceChildren();
     chartLayout.xaxis.range = [0, INITIAL_TIME_WIDTH];
+    updateGoldChartTimeTicks(INITIAL_TIME_WIDTH);
     chartLayout.yaxis.range = [-INITIAL_Y_RANGE, INITIAL_Y_RANGE];
+    updateGoldChartGoldTicks(INITIAL_Y_RANGE);
     chartLayout.shapes = chartLayout.shapes.map(shape =>
         shape.type === "line" && shape.x0 === 0 && shape.y0 === 0
-            ? { ...shape, x1: MAX_TIME_FIXED }
+            ? { ...shape, x1: INITIAL_TIME_WIDTH }
             : shape
     );
 
@@ -226,7 +389,16 @@ function resetGoldChart() {
 
 
 // グラフを更新（1本の折れ線で常に連続させる）
-function updateGoldChart(playerDict) {
+function updateGoldChart(playerDict, gameData) {
+    const gameTime = gameData?.gameData?.gameTime ?? gameData?.gameData?.gametime;
+    const elapsed = gameTime == null ? NaN : Number(gameTime);
+    if (!Number.isFinite(elapsed) || elapsed < 0) {
+        warnGoldChartOnce("gameTime", "ゴールドチャート: 試合時刻を取得できません", gameTime);
+        return;
+    }
+    if (timeData.length > 0 && elapsed < timeData[timeData.length - 1]) {
+        resetGoldChart();
+    }
 
     // ================================
     // ★ チーム合計ゴールド差（グラフ用）
@@ -244,13 +416,13 @@ function updateGoldChart(playerDict) {
 
     const diff = orderTotal - chaosTotal;
 
-    // 時間計測
-    if (startTime === null) startTime = Date.now();
-    const elapsed = Math.floor((Date.now() - startTime) / 1000);
-
     // グラフデータ追加
-    timeData.push(elapsed);
-    goldDiffData.push(diff);
+    if (timeData.length && elapsed === timeData[timeData.length - 1]) {
+        goldDiffData[goldDiffData.length - 1] = diff;
+    } else {
+        timeData.push(elapsed);
+        goldDiffData.push(diff);
+    }
     hadValidData = true;
 
     const traces = [];
@@ -258,44 +430,45 @@ function updateGoldChart(playerDict) {
 
     let startIndex = 0;
     let currentSign = goldDiffData[0] >= 0 ? 1 : -1;
+    let startZeroX = null;
 
     for (let i = 1; i < goldDiffData.length; i++) {
         const sign = goldDiffData[i] >= 0 ? 1 : -1;
 
         if (sign !== currentSign) {
 
-            const zeroX = timeData[i];
-            const zeroY = 0;
-
-            // ★ 1) 現在の区間を 0 まで補完して閉じる
-            traces.push(makeTrace(startIndex, i - 1, currentSign, zeroX, zeroY));
-
-            // ★ 2) 次の区間は 0 から開始するため、startIndex を「補完点」にする
+            traces.push(makeTrace(startIndex, i - 1, currentSign, startZeroX, timeData[i]));
             startIndex = i;
             currentSign = sign;
-
-            // ★ 3) 次の区間の先頭にも 0 補完を入れる
-            // これが「青側の 0 補完」
-            timeData.splice(i, 0, zeroX);
-            goldDiffData.splice(i, 0, zeroY);
-
-            // インデックス調整
-            i++;
+            startZeroX = timeData[i];
         }
     }
 
     // 最後の区間
-    traces.push(makeTrace(startIndex, goldDiffData.length - 1, currentSign));
+    traces.push(makeTrace(startIndex, goldDiffData.length - 1, currentSign, startZeroX));
 
     updateAxes();
     window.Plotly.react('goldChart', traces, chartLayout);
+    if (Array.isArray(gameData.events?.Events)) {
+        renderGoldChartEvents(gameData.events.Events, gameData.allPlayers);
+    } else {
+        warnGoldChartOnce("events", "ゴールドチャート: イベント履歴を取得できません", gameData.events);
+        document.getElementById("goldChartEvents")?.replaceChildren();
+    }
 }
 
 let chartInitialized = false;
 let isUpdatingGoldChart = false;
 
 window.addEventListener("playerdictupdated", async () => {
-    if (!liveClientDataAvailable) {
+    const chart = document.getElementById("goldChartWidget");
+    const allowed = GOLD_CHART_ALLOWED_GAME_MODES.includes(currentGameMode);
+    if (chart) chart.hidden = !allowed;
+    if (!allowed) {
+        resetGoldChart();
+        return;
+    }
+    if (!liveClientDataAvailable || !gameStarted) {
         resetGoldChart();
         return;
     }
@@ -307,14 +480,21 @@ window.addEventListener("playerdictupdated", async () => {
             await initializeChart();
             chartInitialized = true;
         }
-        if (!liveClientDataAvailable) {
+        if (!liveClientDataAvailable || !gameStarted ||
+            !GOLD_CHART_ALLOWED_GAME_MODES.includes(currentGameMode)) {
             resetGoldChart();
             return;
         }
-        updateGoldChart(getPlayerDict());
+        updateGoldChart(getPlayerDict(), latestGameData);
     } catch (error) {
         console.error("failed to update gold chart", error);
     } finally {
         isUpdatingGoldChart = false;
+    }
+});
+
+window.addEventListener("resize", () => {
+    if (hadValidData && Array.isArray(latestGameData?.events?.Events)) {
+        renderGoldChartEvents(latestGameData.events.Events, latestGameData.allPlayers);
     }
 });

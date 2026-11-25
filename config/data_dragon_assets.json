@@ -18,6 +18,11 @@
       "destination": "loading"
     },
     {
+      "source_root": "shared",
+      "source": "champion/centered",
+      "destination": "centered"
+    },
+    {
       "source_root": "versioned",
       "source": "item",
       "destination": "items"

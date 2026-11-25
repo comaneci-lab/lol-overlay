@@ -18,6 +18,10 @@ body,
     display: none;
 }
 
+#overlay-canvas.game-mode-disallowed {
+    visibility: hidden;
+}
+
 .player-runes-card {
     display: grid;
     grid-template-columns: minmax(0, 1fr);

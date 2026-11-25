@@ -1,4 +1,5 @@
 const GAME_START_SPLASH_URL = "/allgamedata";
+const GAME_START_SPLASH_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const GAME_START_SPLASH_ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 const GAME_START_SPLASH_SKIN_PREFIXES = [
     "game_character_skin_displayname_",
@@ -21,6 +22,7 @@ for (const [team, image] of Object.entries(gameStartSplashImages)) {
 
 let gameStartSplashPollTimer = null;
 let gameStartSplashUpdateInProgress = false;
+let gameStartSplashStarted = false;
 
 function normalizeGameStartSplashPosition(position) {
     const aliases = {
@@ -180,6 +182,8 @@ async function showGameStartSplashRole(playersByTeam, roleIndex) {
         for (const image of Object.values(gameStartSplashImages)) {
             image.hidden = true;
         }
+        window.clearInterval(gameStartSplashPollTimer);
+        gameStartSplashPollTimer = null;
         return;
     }
 
@@ -244,6 +248,13 @@ async function updateGameStartSplash() {
         const gameDataResponse = await response.json();
         const data = gameDataResponse?.data;
         const events = data?.events?.Events;
+        if (gameDataResponse?.ok === true) {
+            const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
+            const allowed = GAME_START_SPLASH_ALLOWED_GAME_MODES.includes(gameMode);
+            gameStartSplashCanvas.classList.toggle("game-mode-disallowed", !allowed);
+            if (!allowed) return;
+        }
+        if (gameStartSplashStarted) return;
         if (gameDataResponse?.ok !== true || !Array.isArray(events) ||
             !events.some(event => event?.EventName === "GameStart")) {
             return;
@@ -252,8 +263,7 @@ async function updateGameStartSplash() {
             throw new Error("allPlayers was not available after GameStart");
         }
 
-        window.clearInterval(gameStartSplashPollTimer);
-        gameStartSplashPollTimer = null;
+        gameStartSplashStarted = true;
         const playersByTeam = getGameStartSplashPlayersByRole(data.allPlayers);
         showGameStartSplashRole(playersByTeam, 0);
     } catch (error) {

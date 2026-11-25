@@ -1,0 +1,142 @@
+html,
+body,
+#overlay-canvas {
+    width: 100%;
+    min-height: 100%;
+    margin: 0;
+}
+
+html,
+body {
+    overflow: auto;
+}
+
+#overlay-canvas {
+    box-sizing: border-box;
+    padding: 10px;
+}
+
+.match-order-widget {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 640px;
+    margin: 0 auto;
+    background: #191a3a;
+    color: #f3f5ff;
+    font-family: Arial, sans-serif;
+}
+
+.match-order-widget[hidden] {
+    display: none;
+}
+
+.match-order-section {
+    padding: 12px 18px 16px;
+}
+
+.match-order-items-section {
+    border-top: 1px solid rgba(188, 195, 255, 0.25);
+}
+
+.match-order-heading {
+    margin: 0 0 14px;
+    padding-left: 12px;
+    border-left: 2px solid #3478ff;
+    font-size: 15px;
+    line-height: 18px;
+}
+
+.match-order-note {
+    margin: -8px 0 10px;
+    color: #ffd58a;
+    font-size: 11px;
+}
+
+.match-order-skill-board {
+    display: grid;
+    grid-template-rows: repeat(4, 24px);
+    gap: 6px;
+    overflow-x: auto;
+}
+
+.match-order-skill-row {
+    display: grid;
+    grid-template-columns: 24px repeat(18, 24px);
+    gap: 6px;
+    min-width: max-content;
+}
+
+.match-order-skill-icon,
+.match-order-skill-cell {
+    box-sizing: border-box;
+    width: 24px;
+    height: 24px;
+    border-radius: 3px;
+}
+
+.match-order-skill-icon {
+    object-fit: cover;
+    background: #262747;
+}
+
+.match-order-skill-label {
+    display: grid;
+    place-items: center;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.match-order-skill-cell {
+    display: grid;
+    place-items: center;
+    background: #222442;
+    color: #fff;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.match-order-skill-learned {
+    background: #3478ff;
+}
+
+.match-order-items {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.match-order-item-group {
+    display: flex;
+    min-width: 64px;
+    flex-direction: column;
+    align-items: center;
+    gap: 5px;
+}
+
+.match-order-item-icons {
+    display: flex;
+    min-height: 42px;
+    align-items: center;
+    padding: 4px;
+    background: #222442;
+}
+
+.match-order-item-icon {
+    width: 34px;
+    height: 34px;
+    object-fit: cover;
+}
+
+.match-order-item-time {
+    color: #d7ddff;
+    font-size: 11px;
+    white-space: nowrap;
+}
+
+.match-order-empty {
+    margin: 0;
+    color: rgba(243, 245, 255, 0.7);
+    font-size: 12px;
+}

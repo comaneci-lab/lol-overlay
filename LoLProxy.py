@@ -3,8 +3,10 @@ from flask import Flask, jsonify, send_from_directory
 import configparser
 import hashlib
 import json
+import logging
 import os
 import posixpath
+import queue
 import re
 import requests
 import shutil
@@ -18,7 +20,11 @@ from urllib.parse import quote
 import webbrowser
 import urllib3
 import zlib
+from obswebsocket.exceptions import ConnectionFailure, MessageTimeout
+from websocket import WebSocketConnectionClosedException, WebSocketTimeoutException
 from werkzeug.serving import make_server
+from scripts.OBSAdpter import OBSAuthenticationError, OBSOverlayAdapter, overlay_source_url
+from scripts.overlay_sizes import OverlaySizeConfigError, get_overlay_size
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
@@ -41,6 +47,7 @@ DATA_DRAGON_ARCHIVE_URL = (
 DATA_DRAGON_ASSET_CONFIG_PATH = os.path.join(
     APP_DIR, "config", "data_dragon_assets.json"
 )
+OVERLAY_SIZE_CONFIG_PATH = os.path.join(APP_DIR, "config", "overlay_sizes.json")
 DATA_DRAGON_VERSION_PATH = os.path.join(APP_DIR, ".ddragon-version")
 OVERLAY_UPDATE_BASE_URL = "https://comaneci-lab.github.io/lol-overlay"
 OVERLAY_UPDATE_MANIFEST_URL = f"{OVERLAY_UPDATE_BASE_URL}/update-manifest.json"
@@ -82,28 +89,50 @@ STATIC_JSON_FILES = {
     "summoner_spells": ("summoner_spells.json", "summoner.json"),
     "runes": ("runesReforged.json", "runesReforged.json")
 }
+OBS_CREDENTIAL_TARGET = "LoLOverlay/OBS-WebSocket/127.0.0.1"
+OBS_CREDENTIAL_USERNAME = "OBS"
+DEFAULT_OBS_PORT = 4455
+OBS_RETRY_INTERVAL_MS = 10000
+OVERLAY_DISPLAY_NAMES = {
+    "LoL_Overlay_Landscape.html": "横型オーバーレイ",
+    "LoL_Overlay_Portrait.html": "縦型オーバーレイ",
+    "LoL_PlayerRunes_Overlay.html": "プレイヤールーン",
+    "LoL_GoldChart_Overlay.html": "ゴールドチャート",
+    "LoL_Scoreboard_Overlay.html": "スコアボード",
+    "LoL_TopBar_Overlay.html": "トップバー",
+    "LoL_RoleGoldDiff_Overlay.html": "レーン別ゴールド差",
+    "LoL_ObjectTimer_Overlay.html": "オブジェクトタイマー",
+    "LoL_SkillLevelUp_Overlay.html": "スキルレベルアップ",
+    "LoL_MatchOrder_Overlay.html": "試合アイテム・スキルオーダー",
+    "LoL_PostGameThumbnail_Overlay.html": "試合後サムネイル",
+    "LoL_ChampionMap_Overlay.html": "チャンピオンマップ",
+    "LoL_CSPerMinute_Overlay.html": "分間CS",
+    "LoL_GameStartSplash_Overlay.html": "試合開始スプラッシュ",
+    "LoL_ChampionSkills_Overlay.html": "チャンピオンスキル",
+}
 APP_VERSION_INFO_PATH = os.path.join(RESOURCE_DIR, "build", "app_version.json")
 spectator_data_lock = threading.RLock()
 live_state_lock = threading.RLock()
 data_dragon_cache_lock = threading.RLock()
-spectator_data = None
 spectator_data_revision = 0
 current_game_time = None
 last_live_game_time = None
-spectator_mode_enabled = True
+
+
+def load_application_version_info():
+    try:
+        with open(APP_VERSION_INFO_PATH, encoding="utf-8") as version_file:
+            version_info = json.load(version_file)
+    except (OSError, ValueError):
+        return {}
+    return version_info if isinstance(version_info, dict) else {}
 
 
 def load_application_version():
     if not getattr(sys, "frozen", False):
         return "開発版"
 
-    try:
-        with open(APP_VERSION_INFO_PATH, encoding="utf-8") as version_file:
-            version_info = json.load(version_file)
-    except (OSError, ValueError):
-        return "不明"
-
-    version = version_info.get("version") if isinstance(version_info, dict) else None
+    version = load_application_version_info().get("version")
     return version if isinstance(version, str) and version else "不明"
 
 
@@ -111,15 +140,7 @@ def load_application_commit_sha():
     if not getattr(sys, "frozen", False):
         return None
 
-    try:
-        with open(APP_VERSION_INFO_PATH, encoding="utf-8") as version_file:
-            version_info = json.load(version_file)
-    except (OSError, ValueError):
-        return None
-
-    commit_sha = (
-        version_info.get("commit_sha") if isinstance(version_info, dict) else None
-    )
+    commit_sha = load_application_version_info().get("commit_sha")
     return commit_sha if isinstance(commit_sha, str) and re.fullmatch(
         r"[0-9a-f]{40}", commit_sha
     ) else None
@@ -202,6 +223,17 @@ def fetch_latest_data_dragon_version():
 def check_data_dragon_update():
     installed_version = get_installed_data_dragon_version()
     latest_version = fetch_latest_data_dragon_version()
+    config = load_data_dragon_asset_config()
+    missing_asset_directories = []
+    for mapping in config["directories"]:
+        destination = mapping["destination"]
+        target = get_data_dragon_asset_target(destination)
+        try:
+            with os.scandir(target) as entries:
+                if next(entries, None) is None:
+                    missing_asset_directories.append(destination)
+        except FileNotFoundError:
+            missing_asset_directories.append(destination)
     installed_version_parts = tuple(
         int(part) for part in installed_version.split(".")
     )
@@ -209,7 +241,11 @@ def check_data_dragon_update():
     return {
         "installed_version": installed_version,
         "latest_version": latest_version,
-        "update_available": installed_version_parts < latest_version_parts,
+        "update_available": (
+            installed_version_parts < latest_version_parts
+            or (installed_version_parts == latest_version_parts and bool(missing_asset_directories))
+        ),
+        "missing_asset_directories": missing_asset_directories,
     }
 
 
@@ -814,7 +850,7 @@ def validate_application_update_manifest(manifest):
         raise OverlayUpdateError("アプリ更新情報の形式が不正です。")
 
     version = manifest.get("version")
-    if parse_release_version(version) is None:
+    if not isinstance(version, str) or parse_release_version(version) is None:
         raise OverlayUpdateError("アプリ更新情報のバージョン形式が不正です。")
 
     commit_sha = manifest.get("commit_sha")
@@ -1130,10 +1166,13 @@ def observe_live_api(response):
     all_players = data.get("allPlayers") if isinstance(data, dict) else None
     raw_game_time = game_data.get("gameTime", game_data.get("gametime")) \
         if isinstance(game_data, dict) else None
-    try:
-        game_time = int(float(raw_game_time))
-    except (OverflowError, TypeError, ValueError):
+    if raw_game_time is None:
         game_time = None
+    else:
+        try:
+            game_time = int(float(raw_game_time))
+        except (OverflowError, TypeError, ValueError):
+            game_time = None
 
     is_available = isinstance(all_players, list) and game_time is not None
     with live_state_lock:
@@ -1186,6 +1225,47 @@ class SpectatorDataEditor:
             "Subtitle.TLabel",
             foreground="#94a3b8",
             font=("Segoe UI", 9),
+        )
+        style.configure(
+            "TableHeader.TLabel",
+            foreground="#cbd5e1",
+            font=("Segoe UI", 10, "bold"),
+        )
+        style.configure(
+            "Overlay.Row.Even.TFrame",
+            background="#111827",
+            borderwidth=0,
+            relief="flat",
+        )
+        style.configure(
+            "Overlay.Row.Odd.TFrame",
+            background="#162033",
+            borderwidth=0,
+            relief="flat",
+        )
+        style.configure(
+            "Overlay.Name.Even.TLabel",
+            background="#111827",
+            foreground="#f8fafc",
+            font=("Segoe UI", 11, "bold"),
+        )
+        style.configure(
+            "Overlay.Name.Odd.TLabel",
+            background="#162033",
+            foreground="#f8fafc",
+            font=("Segoe UI", 11, "bold"),
+        )
+        style.configure(
+            "Overlay.File.Even.TLabel",
+            background="#111827",
+            foreground="#94a3b8",
+            font=("Segoe UI", 8),
+        )
+        style.configure(
+            "Overlay.File.Odd.TLabel",
+            background="#162033",
+            foreground="#94a3b8",
+            font=("Segoe UI", 8),
         )
         style.configure(
             "Status.TLabel",
@@ -1258,13 +1338,15 @@ class SpectatorDataEditor:
             "TNotebook.Tab",
             background="#1e293b",
             foreground="#cbd5e1",
-            padding=(16, 9),
-            font=("Segoe UI", 10, "bold"),
+            padding=(12, 6),
+            font=("Segoe UI", 9, "bold"),
         )
         style.map(
             "TNotebook.Tab",
             background=[("selected", "#334155"), ("active", "#27364a")],
             foreground=[("selected", "#f8fafc")],
+            padding=[("selected", (20, 10))],
+            font=[("selected", ("Segoe UI", 12, "bold"))],
         )
         style.configure(
             "TButton",
@@ -1312,6 +1394,22 @@ class SpectatorDataEditor:
             background="#111827",
             foreground="#e5e7eb",
         )
+        style.configure(
+            "Overlay.Vertical.TScrollbar",
+            background="#334155",
+            troughcolor="#111827",
+            bordercolor="#111827",
+            lightcolor="#334155",
+            darkcolor="#334155",
+            arrowcolor="#cbd5e1",
+            arrowsize=12,
+        )
+        style.map(
+            "Overlay.Vertical.TScrollbar",
+            background=[("active", "#475569")],
+            lightcolor=[("active", "#475569")],
+            darkcolor=[("active", "#475569")],
+        )
         self.entries = {}
         self.buff_entries = {}
         self.dragon_history_frames = {}
@@ -1322,7 +1420,7 @@ class SpectatorDataEditor:
         self.dragon_history_fallback_image = None
         self.game_time_display = tk.StringVar(value="試合時間: --:--")
         self.game_state_display = tk.StringVar(value="接続確認中")
-        self.spectator_mode_var = tk.BooleanVar(value=get_spectator_mode_enabled())
+        self.obs_state_display = tk.StringVar(value="OBS未接続")
         self.is_spectator_game = False
         self.last_seen_revision = get_spectator_data_revision()
 
@@ -1336,6 +1434,7 @@ class SpectatorDataEditor:
         header = ttk.Frame(content, style="App.TFrame")
         header.grid(row=0, column=0, sticky="ew", pady=(0, 14))
         header.grid_columnconfigure(0, weight=1)
+        header.grid_columnconfigure(1, weight=0)
         title_block = ttk.Frame(header, style="App.TFrame")
         title_block.grid(row=0, column=0, sticky="w")
         ttk.Label(
@@ -1353,12 +1452,20 @@ class SpectatorDataEditor:
             text=f"APP  {APP_VERSION}",
             style="Status.TLabel",
         ).grid(row=0, column=1, rowspan=2, sticky="e", padx=(12, 0))
+        status_block = ttk.Frame(header, style="App.TFrame")
+        status_block.grid(row=2, column=0, sticky="w", pady=(10, 0))
         self.game_state_label = ttk.Label(
-            header,
+            status_block,
             textvariable=self.game_state_display,
             style="Status.TLabel",
         )
-        self.game_state_label.grid(row=2, column=0, sticky="w", pady=(10, 0))
+        self.game_state_label.grid(row=0, column=0, sticky="w")
+        self.obs_state_label = ttk.Label(
+            status_block,
+            textvariable=self.obs_state_display,
+            style="Status.TLabel",
+        )
+        self.obs_state_label.grid(row=0, column=1, sticky="w", padx=(8, 0))
         ttk.Label(
             header,
             text="ローカルAPI  127.0.0.1:8888",
@@ -1367,18 +1474,18 @@ class SpectatorDataEditor:
 
         self.tabs = ttk.Notebook(content)
         self.tabs.grid(row=1, column=0, sticky="nsew")
-        config_tab = ttk.Frame(self.tabs, padding=14, style="App.TFrame")
         data_tab = ttk.Frame(self.tabs, padding=14, style="App.TFrame")
         update_tab = ttk.Frame(self.tabs, padding=14, style="App.TFrame")
         data_tab.grid_columnconfigure(0, weight=1)
         update_tab.grid_columnconfigure(0, weight=1)
 
-        self.setup_config_tab()
+        self.setup_management_tab()
 
-
-        self.tabs.add(data_tab, text="観戦モード")
+        self.tabs.add(data_tab, text="観戦")
+        settings_tab = ttk.Frame(self.tabs, padding=14, style="App.TFrame")
+        self.tabs.add(settings_tab, text="設定")
+        self.create_obs_settings_view(settings_tab)
         self.tabs.add(update_tab, text="更新")
-
 
 
         game_summary = ttk.Frame(data_tab, style="App.TFrame")
@@ -1388,12 +1495,6 @@ class SpectatorDataEditor:
             textvariable=self.game_time_display,
             font=("Segoe UI", 12, "bold"),
         ).grid(row=0, column=0, sticky="w")
-        ttk.Checkbutton(
-            game_summary,
-            text="観戦モード",
-            variable=self.spectator_mode_var,
-            command=self.toggle_spectator_mode,
-        ).grid(row=0, column=1, sticky="e", padx=(12, 0))
         game_summary.grid_columnconfigure(0, weight=1)
 
         self.editor_panel = ttk.Frame(data_tab, style="App.TFrame")
@@ -1401,8 +1502,6 @@ class SpectatorDataEditor:
         self.editor_panel.grid_columnconfigure(0, weight=1)
         self.editor_panel.grid_columnconfigure(1, weight=1)
         data_tab.grid_rowconfigure(1, weight=1)
-        if not self.spectator_mode_var.get():
-            self.editor_panel.grid_remove()
 
         self.overlay_update_in_progress = False
         self.data_dragon_update_in_progress = False
@@ -1696,34 +1795,6 @@ class SpectatorDataEditor:
 
 
 
-    def on_html_selection_changed(self, _event=None):
-        if self.html_tree.selection():
-            self.html_copy_button.state(["!disabled"])
-            self.html_status.set("")
-        else:
-            self.html_copy_button.state(["disabled"])
-
-    def copy_html_url(self):
-        selection = self.html_tree.selection()
-        if not selection:
-            return
-
-        filename = self.html_tree.item(selection[0], "values")[0]
-        url = f"http://127.0.0.1:8888/html/{quote(filename)}"
-        try:
-            self.root.clipboard_clear()
-            self.root.clipboard_append(url)
-            self.root.update_idletasks()
-        except tk.TclError as error:
-            messagebox.showerror(
-                "コピーエラー",
-                f"HTMLのURLをクリップボードにコピーできません: {error}",
-                parent=self.root,
-            )
-            return
-
-        self.html_status.set("URLをコピーしました。")
-
     def start_update_checks(self):
         self.start_data_dragon_update_check()
         if is_development_environment():
@@ -1776,11 +1847,23 @@ class SpectatorDataEditor:
 
         installed_version = result["installed_version"]
         latest_version = result["latest_version"]
+        missing_assets = result.get("missing_asset_directories", [])
         if result["update_available"]:
-            self.data_dragon_update_status.set(
-                f"更新があります: {installed_version} → {latest_version}"
-            )
+            if installed_version == latest_version and missing_assets:
+                self.data_dragon_update_status.set(
+                    f"assetsが未配置です: {', '.join(missing_assets)}"
+                )
+            else:
+                self.data_dragon_update_status.set(
+                    f"更新があります: {installed_version} → {latest_version}"
+                )
             self.data_dragon_update_button.state(["!disabled"])
+        elif missing_assets:
+            self.data_dragon_update_status.set(
+                f"assetsが未配置です: {', '.join(missing_assets)}"
+                f"（インストール済み {installed_version} は公開版より新しいため更新できません）"
+            )
+            self.data_dragon_update_button.state(["disabled"])
         elif installed_version == latest_version:
             self.data_dragon_update_status.set(
                 f"Assets・JSONは最新版です ({installed_version})"
@@ -2079,104 +2162,614 @@ class SpectatorDataEditor:
 
         set_widget_state(self.editor_panel)
 
-    def toggle_spectator_mode(self):
-        global spectator_mode_enabled
-        enabled = self.spectator_mode_var.get()
-        try:
-            save_spectator_mode_enabled(enabled)
-        except (OSError, configparser.Error, ValueError) as error:
-            self.spectator_mode_var.set(spectator_mode_enabled)
-            self.show_save_error(error)
-            return
-
-        with live_state_lock:
-            spectator_mode_enabled = enabled
-        if enabled:
-            self.editor_panel.grid()
-        else:
-            self.editor_panel.grid_remove()
-
     def get_html_files(self):
-        """HTML ファイルの一覧を取得"""
-        import os
         html_dir = os.path.join(APP_DIR, "html")
-        files = []
-        for filename in sorted(os.listdir(html_dir)):
-            if os.path.isfile(os.path.join(html_dir, filename)) and filename.endswith('.html'):
-                filepath = os.path.join("html", filename)
-                url = f'<code>{filepath}</code> <a href="/html/{filename}" target="_blank">📂 表示</a>'
-                files.append((filename, url))
-        return files
+        return [
+            filename
+            for filename in sorted(os.listdir(html_dir), key=str.casefold)
+            if filename.endswith(".html")
+            and os.path.isfile(os.path.join(html_dir, filename))
+        ]
 
     def create_html_view(self, tab):
-        """HTML ファイル一覧ビューを作成する"""
-        html_dir = os.path.join(APP_DIR, "html")
-        files = self.get_html_files()  # HTML ファイルをリストに取得
-        
-        # HTML ファイルリスト用のフレーム
-        list_frame = ttk.Frame(tab)
-        list_frame.pack(fill="both", expand=True, padx=(0, 14), pady=8)
+        tab.grid_rowconfigure(1, weight=1)
+        tab.grid_columnconfigure(0, weight=1)
+        self.obs_active = False
+        self.obs_busy = False
+        self.obs_state = None
+        self.obs_timer = None
+        self.obs_pending_settings = None
+        self.obs_results = queue.Queue()
+        self.obs_buttons = {}
+        self.obs_status_labels = {}
+        self.obs_port = tk.StringVar(value=str(DEFAULT_OBS_PORT))
+        self.obs_password = tk.StringVar()
+        self.obs_status = tk.StringVar(value="OBS未接続")
+        self.obs_saved_password = False
 
-        row_count = 0
+        ttk.Label(
+            tab,
+            text="OBSのブラウザーソースに追加するHTMLファイル",
+            style="Subtitle.TLabel",
+        ).grid(row=0, column=0, sticky="w", pady=(0, 8))
 
-        for filename, url in files:
-            lbl_file = ttk.Label(
-                list_frame,
-                text=filename
+        list_frame = ttk.Frame(tab, style="App.TFrame")
+        list_frame.grid(row=1, column=0, sticky="nsew")
+        list_frame.grid_rowconfigure(0, weight=1)
+        list_frame.grid_columnconfigure(0, weight=1)
+
+        self.html_canvas = tk.Canvas(
+            list_frame,
+            background="#111827",
+            highlightthickness=0,
+        )
+        self.html_canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar = ttk.Scrollbar(
+            list_frame,
+            orient="vertical",
+            style="Overlay.Vertical.TScrollbar",
+            command=self.html_canvas.yview,
+        )
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        self.html_canvas.configure(yscrollcommand=scrollbar.set)
+        self.html_rows = ttk.Frame(self.html_canvas, style="App.TFrame")
+        self.html_rows.grid_columnconfigure(0, weight=3, minsize=220)
+        self.html_rows.grid_columnconfigure(1, weight=1, minsize=80)
+        self.html_rows.grid_columnconfigure(2, weight=2, minsize=180)
+        self.html_rows.grid_columnconfigure(3, weight=3, minsize=260)
+        for widget in (self.html_canvas, self.html_rows, scrollbar):
+            widget.bind("<MouseWheel>", self.scroll_html_list)
+        window = self.html_canvas.create_window(
+            (0, 0), window=self.html_rows, anchor="nw"
+        )
+        self.html_rows.bind(
+            "<Configure>",
+            lambda _event: self.html_canvas.configure(
+                scrollregion=self.html_canvas.bbox("all")
+            ),
+        )
+        self.html_canvas.bind(
+            "<Configure>",
+            lambda event: self.html_canvas.itemconfigure(window, width=event.width),
+        )
+
+        controls = ttk.Frame(tab, style="App.TFrame")
+        controls.grid(row=2, column=0, sticky="ew", pady=(10, 0))
+        self.html_refresh_button = ttk.Button(
+            controls,
+            text="一覧を更新",
+            command=lambda: self.refresh_html_files(notify=True),
+        )
+        self.html_refresh_button.grid(row=0, column=0)
+        self.html_status = tk.StringVar()
+        ttk.Label(
+            controls,
+            textvariable=self.html_status,
+            style="Subtitle.TLabel",
+        ).grid(row=0, column=1, sticky="w", padx=(10, 0))
+        controls.grid_columnconfigure(1, weight=1)
+        ttk.Label(controls, textvariable=self.obs_status, style="Subtitle.TLabel").grid(
+            row=1, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
+        self.refresh_html_files()
+
+    def create_obs_settings_view(self, tab):
+        ttk.Label(
+            tab, text="OBS WebSocket接続設定", style="Title.TLabel"
+        ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 16))
+        ttk.Label(tab, text="接続先").grid(row=1, column=0, sticky="w", pady=4)
+        ttk.Label(tab, text="127.0.0.1").grid(row=1, column=1, sticky="w", pady=4)
+        ttk.Label(tab, text="ポート").grid(row=2, column=0, sticky="w", pady=4)
+        self.obs_port_entry = ttk.Entry(tab, textvariable=self.obs_port, width=8)
+        self.obs_port_entry.grid(row=2, column=1, sticky="w", pady=4)
+        ttk.Label(tab, text="パスワード").grid(row=3, column=0, sticky="w", pady=4)
+        self.obs_password_entry = ttk.Entry(
+            tab, textvariable=self.obs_password, show="*", width=24
+        )
+        self.obs_password_entry.grid(row=3, column=1, sticky="w", pady=4)
+        buttons = ttk.Frame(tab, style="App.TFrame")
+        buttons.grid(row=4, column=0, columnspan=2, sticky="w", pady=(12, 0))
+        self.obs_connect_button = ttk.Button(
+            buttons, text="OBSに接続", command=self.toggle_obs_connection
+        )
+        self.obs_connect_button.grid(row=0, column=0, padx=(0, 6))
+        self.obs_password_delete_button = ttk.Button(
+            buttons, text="保存済みパスワードを削除", command=self.delete_saved_obs_password
+        )
+        self.obs_password_delete_button.grid(row=0, column=1, padx=6)
+        ttk.Label(tab, textvariable=self.obs_status, style="Subtitle.TLabel").grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(8, 0)
+        )
+        ttk.Label(
+            tab,
+            text="接続成功時にポートを保存し、パスワードの保存を確認します。",
+            style="Subtitle.TLabel",
+        ).grid(row=6, column=0, columnspan=2, sticky="w", pady=(8, 0))
+        auto_connect = self.load_obs_settings()
+        self.obs_port.trace_add("write", self.obs_settings_changed)
+        self.obs_password.trace_add("write", self.obs_settings_changed)
+        if auto_connect:
+            self.root.after(
+                0, self.start_auto_obs_connection, self.obs_port.get(), self.obs_password.get()
             )
 
-            btn_open = ttk.Button(
-                list_frame,
+    def load_obs_settings(self):
+        port_loaded = True
+        try:
+            self.obs_port.set(str(load_obs_port()))
+        except OBSSettingsError as error:
+            messagebox.showerror("OBS設定エラー", str(error), parent=self.root)
+            port_loaded = False
+        return self.load_saved_obs_password() and port_loaded
+
+    def load_saved_obs_password(self):
+        try:
+            password = load_obs_password()
+        except OBSSettingsError as error:
+            messagebox.showerror("OBS設定エラー", str(error), parent=self.root)
+            return False
+        self.obs_password.set(password if password is not None else "")
+        self.obs_saved_password = bool(password)
+        self.refresh_obs_header_state()
+        return bool(password)
+
+    def save_connected_obs_settings(self, port, password):
+        try:
+            save_obs_port(port)
+        except OBSSettingsError as error:
+            messagebox.showerror(
+                "OBS設定エラー", f"OBSには接続しましたが、{error}", parent=self.root
+            )
+        if password and messagebox.askyesno(
+            "OBS設定",
+            "このパスワードをWindows資格情報マネージャーに保存しますか？\n"
+            "「いいえ」の場合、保存済みのパスワードは変更されません。",
+            parent=self.root,
+        ):
+            try:
+                save_obs_password(password)
+                self.obs_saved_password = True
+                self.refresh_obs_header_state()
+            except OBSSettingsError as error:
+                messagebox.showerror(
+                    "OBS設定エラー", f"OBSには接続しましたが、{error}", parent=self.root
+                )
+
+    def delete_saved_obs_password(self):
+        if not messagebox.askyesno(
+            "OBS設定", "保存済みのOBSパスワードを削除しますか？", parent=self.root
+        ):
+            return
+        try:
+            deleted = delete_obs_password()
+        except OBSSettingsError as error:
+            messagebox.showerror("OBS設定エラー", str(error), parent=self.root)
+            return
+        self.obs_password.set("")
+        self.obs_saved_password = False
+        self.refresh_obs_header_state()
+        messagebox.showinfo(
+            "OBS設定", "保存済みパスワードを削除しました。" if deleted
+            else "保存済みパスワードはありません。",
+            parent=self.root,
+        )
+
+    def set_obs_settings_editable(self, enabled):
+        state = ["!disabled"] if enabled else ["disabled"]
+        for widget in (
+            self.obs_port_entry, self.obs_password_entry, self.obs_password_delete_button,
+        ):
+            widget.state(state)
+
+    def obs_settings_changed(self, *_args):
+        self.refresh_obs_header_state()
+        if getattr(self, "obs_active", False) and not self.obs_busy and self.obs_state is None:
+            self.stop_obs_connection(reload_password=False)
+            self.obs_status.set("設定が変更されたため自動再接続を停止しました。OBSに接続してください。")
+
+    def start_auto_obs_connection(self, port, password):
+        if (
+            not self.obs_active and not self.obs_busy
+            and self.obs_port.get() == port and self.obs_password.get() == password
+        ):
+            self.obs_active = True
+            self.obs_connect_button.configure(text="接続解除")
+            self.refresh_obs_header_state()
+            self.start_obs_request()
+
+    def cancel_obs_timer(self):
+        if self.obs_timer is not None:
+            self.root.after_cancel(self.obs_timer)
+            self.obs_timer = None
+
+    def schedule_obs_request(self):
+        self.cancel_obs_timer()
+        self.obs_timer = self.root.after(OBS_RETRY_INTERVAL_MS, self.scheduled_obs_request)
+
+    def refresh_obs_header_state(self):
+        if getattr(self, "obs_state", None) is not None:
+            text = "OBS接続中"
+            style = "Status.Good.TLabel"
+        elif getattr(self, "obs_saved_password", False) or bool(self.obs_password.get().strip()):
+            text = "OBS接続待ち"
+            style = "Status.Warning.TLabel"
+        else:
+            text = "OBS未接続"
+            style = "Status.TLabel"
+        display = getattr(self, "obs_state_display", None)
+        if display is not None:
+            display.set(text)
+        label = getattr(self, "obs_state_label", None)
+        if label is not None:
+            label.configure(style=style)
+
+    def scheduled_obs_request(self):
+        self.obs_timer = None
+        if self.obs_active and not self.obs_busy:
+            self.start_obs_request()
+
+    def stop_obs_connection(self, reload_password=True):
+        self.cancel_obs_timer()
+        self.obs_active = False
+        self.obs_state = None
+        self.obs_pending_settings = None
+        if reload_password:
+            self.obs_password.set("")
+            self.load_saved_obs_password()
+        self.obs_status.set("OBS未接続")
+        self.refresh_obs_header_state()
+        self.obs_connect_button.configure(text="OBSに接続")
+        self.obs_connect_button.state(["disabled"] if self.obs_busy else ["!disabled"])
+        self.set_obs_settings_editable(not self.obs_busy)
+        self.update_obs_buttons()
+
+    def setup_management_tab(self):
+        management_tab = ttk.Frame(self.tabs, padding=14, style="App.TFrame")
+        self.tabs.add(management_tab, text="管理")
+        self.create_html_view(management_tab)
+
+    def refresh_html_files(self, notify=False):
+        for child in self.html_rows.winfo_children():
+            child.destroy()
+        self.obs_buttons.clear()
+        self.obs_status_labels.clear()
+        try:
+            filenames = self.get_html_files()
+        except OSError as error:
+            self.html_status.set(f"HTML一覧を読み込めません: {error}")
+            return
+
+        headers = (
+            ("オーバーレイ", 0),
+            ("状態", 1),
+            ("ブラウザ", 2),
+            ("OBS", 3),
+        )
+        for text, column in headers:
+            header = ttk.Label(
+                self.html_rows,
+                text=text,
+                style="TableHeader.TLabel",
+            )
+            header.grid(row=0, column=column, pady=(0, 6))
+            header.bind("<MouseWheel>", self.scroll_html_list)
+
+        for row, filename in enumerate(filenames):
+            list_row = row * 2 + 1
+            row_style = "Overlay.Row.Odd.TFrame" if row % 2 else "Overlay.Row.Even.TFrame"
+            name_style = "Overlay.Name.Odd.TLabel" if row % 2 else "Overlay.Name.Even.TLabel"
+            file_style = "Overlay.File.Odd.TLabel" if row % 2 else "Overlay.File.Even.TLabel"
+            item_frame = ttk.Frame(self.html_rows, style=row_style)
+            item_frame.grid(row=list_row, column=0, sticky="nsew")
+            item_frame.grid_columnconfigure(0, weight=1)
+            item_frame.grid_rowconfigure(0, weight=1)
+            item_frame.grid_rowconfigure(1, weight=1)
+            item_name = OVERLAY_DISPLAY_NAMES.get(filename)
+            if item_name is None:
+                item_name = os.path.splitext(filename)[0].replace("_", " ")
+            name_label = ttk.Label(
+                item_frame,
+                text=item_name,
+                style=name_style,
+            )
+            name_label.grid(row=0, column=0, sticky="sw", padx=8)
+            file_label = ttk.Label(
+                item_frame,
+                text=filename,
+                style=file_style,
+            )
+            file_label.grid(row=1, column=0, sticky="nw", padx=8, pady=(0, 4))
+            status_frame = ttk.Frame(self.html_rows, style=row_style)
+            status_frame.grid(row=list_row, column=1, sticky="nsew")
+            status_frame.grid_columnconfigure(0, weight=1)
+            status_frame.grid_rowconfigure(0, weight=1)
+            status_label = ttk.Label(
+                status_frame,
+                text="未確認",
+                style="Status.TLabel",
+                anchor="center",
+            )
+            status_label.grid(row=0, column=0, padx=8, pady=8)
+            self.obs_status_labels[filename] = status_label
+
+            browser_frame = ttk.Frame(self.html_rows, style=row_style)
+            browser_frame.grid(row=list_row, column=2, sticky="nsew")
+            browser_frame.grid_columnconfigure(0, weight=1)
+            browser_frame.grid_rowconfigure(0, weight=1)
+            browser_buttons = ttk.Frame(browser_frame, style=row_style)
+            browser_buttons.grid(row=0, column=0)
+            open_button = ttk.Button(
+                browser_buttons,
                 text="Open",
-                command=lambda f=filename: self.open_file(f)
+                command=lambda name=filename: self.open_file(name),
             )
-
-            btn_copy = ttk.Button(
-                list_frame,
-                text="Copy URL",
-                command=lambda u=url: self.copy_to_clipboard(u)
+            open_button.grid(row=0, column=0, padx=(0, 5))
+            copy_button = ttk.Button(
+                browser_buttons,
+                text="URL Copy",
+                command=lambda name=filename: self.copy_html_url(name),
             )
+            copy_button.grid(row=0, column=1)
 
-            lbl_file.grid(
-                row=row_count, column=0,
-                padx=(0, 10), pady=2, sticky="w"
+            obs_frame = ttk.Frame(self.html_rows, style=row_style)
+            obs_frame.grid(row=list_row, column=3, sticky="nsew")
+            obs_frame.grid_columnconfigure(0, weight=1)
+            obs_frame.grid_rowconfigure(0, weight=1)
+            obs_buttons = ttk.Frame(obs_frame, style=row_style)
+            obs_buttons.grid(row=0, column=0)
+            action_buttons = {}
+            for column, (action, text) in enumerate((
+                ("add", "追加"),
+                ("show", "表示"),
+                ("hide", "非表示"),
+                ("delete", "削除"),
+            ), start=0):
+                button = ttk.Button(
+                    obs_buttons,
+                    text=text,
+                    width=5,
+                    command=lambda name=filename, operation=action: self.start_obs_action(
+                        operation, name
+                    ),
+                )
+                button.grid(row=0, column=column, padx=(0 if column == 0 else 5, 0))
+                action_buttons[action] = button
+            self.obs_buttons[filename] = action_buttons
+            separator = ttk.Separator(
+                self.html_rows,
+                orient="horizontal",
             )
-
-            btn_open.grid(
-                row=row_count, column=1,
-                padx=(0, 5), pady=2, sticky="w"
+            separator.grid(
+                row=list_row + 1,
+                column=0,
+                columnspan=4,
+                sticky="ew",
+                pady=(0, 0),
             )
+            for widget in (
+                item_frame, name_label, file_label, status_frame, status_label,
+                browser_frame, open_button, copy_button, obs_frame,
+                *action_buttons.values(),
+            ):
+                widget.bind("<MouseWheel>", self.scroll_html_list)
+        self.update_obs_buttons()
+        self.html_status.set(
+            f"{len(filenames)}件のHTMLファイル"
+            if filenames
+            else "HTMLファイルが見つかりません。"
+        )
+        if self.obs_active and not self.obs_busy:
+            self.start_obs_request()
+        if notify:
+            messagebox.showinfo("一覧を更新", "更新完了しました。", parent=self.root)
 
-            btn_copy.grid(
-                row=row_count, column=2,
-                padx=(0, 5), pady=2, sticky="w"
+    def update_obs_buttons(self):
+        overlays = self.obs_state["overlays"] if self.obs_state else {}
+        for filename, buttons in self.obs_buttons.items():
+            state = overlays.get(filename)
+            available = self.obs_active and not self.obs_busy and state is not None
+            items = state["items"] if available and state is not None else []
+            exists = available and state is not None and state["exists"]
+            is_shown = any(item[1] for item in items)
+            status_label = self.obs_status_labels.get(filename)
+            if status_label is not None:
+                if not available:
+                    status_text = "未確認"
+                    status_style = "Status.TLabel"
+                elif not exists:
+                    status_text = "未追加"
+                    status_style = "Status.TLabel"
+                elif is_shown:
+                    status_text = "表示中"
+                    status_style = "Status.Good.TLabel"
+                else:
+                    status_text = "非表示"
+                    status_style = "Status.Warning.TLabel"
+                status_label.configure(text=status_text, style=status_style)
+            enabled = {
+                "add": available and not exists,
+                "show": bool(items) and any(not item[1] for item in items),
+                "hide": is_shown,
+                "delete": bool(items),
+            }
+            for action, button in buttons.items():
+                button.state(["!disabled"] if enabled[action] else ["disabled"])
+
+    def toggle_obs_connection(self):
+        if self.obs_active:
+            self.stop_obs_connection()
+            return
+        if self.obs_busy:
+            return
+        try:
+            parse_obs_port(self.obs_port.get())
+        except OBSSettingsError as error:
+            messagebox.showerror("OBS接続エラー", str(error), parent=self.root)
+            return
+        self.obs_active = True
+        self.obs_pending_settings = (int(self.obs_port.get()), self.obs_password.get())
+        self.obs_connect_button.configure(text="接続解除")
+        self.refresh_obs_header_state()
+        self.start_obs_request(notify_error=True)
+
+    def start_obs_action(self, action, filename):
+        if self.obs_busy or not self.obs_active or self.obs_state is None:
+            return
+        expected_state = self.obs_state
+        if action == "delete" and not messagebox.askyesno(
+            "OBSソースの削除",
+            f"シーン「{expected_state['scene']}」の「{os.path.splitext(filename)[0]}」"
+            "をすべて削除しますか？\n最後の配置を削除すると、ソース自体も削除される場合があります。",
+            parent=self.root,
+        ):
+            return
+        if self.obs_busy or not self.obs_active or self.obs_state is not expected_state:
+            messagebox.showerror(
+                "OBSエラー", "OBSの状態が変わったため操作を中止しました。", parent=self.root
             )
+            return
+        if action == "add" and not os.path.isfile(os.path.join(APP_DIR, "html", filename)):
+            messagebox.showerror(
+                "OBSエラー", "HTMLファイルが見つかりません。一覧を更新してください。", parent=self.root
+            )
+            self.refresh_html_files()
+            return
+        dimensions = None
+        if action == "add":
+            try:
+                dimensions = get_overlay_size(OVERLAY_SIZE_CONFIG_PATH, filename)
+            except OverlaySizeConfigError as error:
+                messagebox.showerror("OBS設定エラー", str(error), parent=self.root)
+                return
+        self.start_obs_request(action, filename, notify_error=True, dimensions=dimensions)
 
-            row_count += 1
+    def start_obs_request(
+        self, action=None, filename=None, notify_error=False, dimensions=None
+    ):
+        if not self.obs_active or self.obs_busy:
+            return
+        self.cancel_obs_timer()
+        self.obs_busy = True
+        self.refresh_obs_header_state()
+        self.obs_connect_button.state(["disabled"] if action else ["!disabled"])
+        self.html_refresh_button.state(["disabled"])
+        self.set_obs_settings_editable(False)
+        self.update_obs_buttons()
+        self.obs_status.set("OBSの状態を確認中...")
+        port = int(self.obs_port.get())
+        password = self.obs_password.get()
+        filenames = list(self.obs_buttons)
+        expected_state = self.obs_state
 
-    def setup_config_tab(self):
-        config_tab = ttk.Frame(self.tabs, padding=14, style="App.TFrame")
-        self.tabs.add(config_tab, text="設定")
+        def run():
+            action_error = None
+            try:
+                with OBSOverlayAdapter(port, password) as adapter:
+                    if action is not None:
+                        try:
+                            adapter.apply_overlay_action(
+                                action, filename, expected_state, dimensions,
+                            )
+                        except Exception as error:
+                            logging.exception("OBS操作に失敗しました")
+                            action_error = error
+                    state = adapter.get_overlay_state(filenames)
+                self.obs_results.put((state, action_error, action, notify_error, None))
+            except Exception as error:
+                connection_error = error
+                if is_retryable_obs_error(error):
+                    logging.info("OBS接続待ち: %s", error)
+                else:
+                    logging.exception("OBSの状態を取得できませんでした")
+                if action_error is not None:
+                    error = RuntimeError(f"{action_error}\n状態の再取得にも失敗しました: {error}")
+                self.obs_results.put((None, error, action, notify_error, connection_error))
 
-        # HTML ファイル一覧ビューを作成して追加
-        self.create_html_view(config_tab)
+        threading.Thread(target=run, daemon=True).start()
+        self.root.after(100, self.finish_obs_request)
 
+    def finish_obs_request(self):
+        try:
+            state, error, action, notify_error, connection_error = self.obs_results.get_nowait()
+        except queue.Empty:
+            self.root.after(100, self.finish_obs_request)
+            return
+        self.obs_busy = False
+        self.obs_connect_button.state(["!disabled"])
+        self.html_refresh_button.state(["!disabled"])
+        if not self.obs_active:
+            self.set_obs_settings_editable(True)
+            self.refresh_obs_header_state()
+            return
+        if state is None:
+            self.obs_state = None
+            if is_retryable_obs_error(connection_error):
+                self.obs_connect_button.configure(text="再試行を停止")
+                self.set_obs_settings_editable(True)
+                self.obs_status.set(
+                    "OBS接続待ち（10秒ごとに再試行）。OBSの起動、WebSocketの有効化、"
+                    "ポート番号を確認してください。"
+                )
+                self.refresh_obs_header_state()
+                self.schedule_obs_request()
+            else:
+                self.obs_active = False
+                self.obs_pending_settings = None
+                self.obs_connect_button.configure(text="OBSに接続")
+                self.set_obs_settings_editable(True)
+                self.obs_status.set(f"OBS接続を停止しました: {error}")
+                self.refresh_obs_header_state()
+        else:
+            self.obs_state = state
+            self.obs_connect_button.configure(text="接続解除")
+            self.refresh_obs_header_state()
+            if error is None and self.obs_pending_settings is not None:
+                settings = self.obs_pending_settings
+                self.obs_pending_settings = None
+                self.save_connected_obs_settings(*settings)
+            self.obs_status.set(
+                f"OBSシーン: {state['scene']}（同名ソースがある場合は追加できません）"
+            )
+        self.update_obs_buttons()
+        if error is not None and notify_error and (action is not None or not is_retryable_obs_error(connection_error)):
+            detail = f"OBSの操作または状態確認に失敗しました: {error}"
+            if action is not None:
+                detail += "\n操作が一部反映された可能性があります。OBSで確認してください。"
+            messagebox.showerror("OBSエラー", detail, parent=self.root)
 
-    def copy_to_clipboard(self, url):
-        """指定された URL の一部をクリップボードにコピーする"""
-        # URL から '/html/' 部分以降を抽出
-        start_index = url.find('/html/')
-        if start_index != -1:
-            end = url.find('"', start_index)
-            copied_text = url[start_index:end]
+    def scroll_html_list(self, event):
+        if event.delta:
+            steps = max(1, abs(event.delta) // 120)
+            self.html_canvas.yview_scroll(-steps if event.delta > 0 else steps, "units")
+        return "break"
+
+    def copy_html_url(self, filename):
+        url = overlay_source_url(filename)
+        try:
             self.root.clipboard_clear()
-            self.root.clipboard_append(f"http://127.0.0.1:8888{copied_text}")
+            self.root.clipboard_append(url)
+            self.root.update_idletasks()
+        except tk.TclError as error:
+            messagebox.showerror(
+                "コピーエラー",
+                f"HTMLのURLをクリップボードにコピーできません: {error}",
+                parent=self.root,
+            )
+            return
+        self.html_status.set("URLをコピーしました。")
 
     def open_file(self, filename):
-        """HTML ファイルを開く処理"""
-        filepath = os.path.join("html", filename)
-        url = f"http://127.0.0.1:8888/html/{filename}"
-        webbrowser.open(url)
+        url = overlay_source_url(filename)
+        try:
+            opened = webbrowser.open(url)
+        except (OSError, webbrowser.Error) as error:
+            self.html_status.set(f"ブラウザーを開けません: {error}")
+            return
+        self.html_status.set(
+            "ブラウザーで開きました。"
+            if opened
+            else "ブラウザーを開けませんでした。"
+        )
 
     @staticmethod
     def format_game_time(seconds):
@@ -2346,6 +2939,8 @@ class SpectatorDataEditor:
                 self.load_form(get_spectator_data())
                 self.last_seen_revision = revision
         except (OSError, ValueError) as error:
+            self.is_spectator_game = False
+            self.set_editor_inputs_enabled(False)
             self.game_state_display.set("接続を確認できません")
             self.game_state_label.configure(style="Status.Warning.TLabel")
             self.show_save_error(error)
@@ -2373,53 +2968,130 @@ def initialize_settings():
     if not os.path.exists(CONFIG_PATH):
         with open(CONFIG_PATH, "w", encoding="utf-8") as settings_file:
             settings_file.write(
-                f"[settings]\nlanguage = {DEFAULT_LANGUAGE}\nspectator_mode = true\n"
+                f"[settings]\nlanguage = {DEFAULT_LANGUAGE}\n"
             )
 
     get_language_code()
-    global spectator_mode_enabled
-    spectator_mode_enabled = load_spectator_mode_setting()
 
 
-def load_spectator_mode_setting():
+def write_settings_value(section, option, value):
+    parser = configparser.ConfigParser()
+    with open(CONFIG_PATH, "r", encoding="utf-8-sig") as settings_file:
+        parser.read_file(settings_file)
+    if not parser.has_section(section):
+        parser.add_section(section)
+    parser.set(section, option, value)
+
+    temporary_path = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            "w", encoding="utf-8", dir=os.path.dirname(CONFIG_PATH),
+            prefix=".settings-", suffix=".tmp", delete=False,
+        ) as settings_file:
+            temporary_path = settings_file.name
+            parser.write(settings_file)
+        os.replace(temporary_path, CONFIG_PATH)
+    finally:
+        if temporary_path is not None and os.path.exists(temporary_path):
+            os.remove(temporary_path)
+
+
+class OBSSettingsError(ValueError):
+    pass
+
+
+def is_retryable_obs_error(error):
+    if isinstance(error, OBSAuthenticationError):
+        return False
+    if isinstance(error, (OSError, MessageTimeout, WebSocketConnectionClosedException, WebSocketTimeoutException)):
+        return True
+    if isinstance(error, ConnectionFailure):
+        return isinstance(error.__cause__ or error.__context__, OSError)
+    return False
+
+
+def parse_obs_port(value):
+    try:
+        port = int(value)
+    except ValueError as error:
+        raise OBSSettingsError("ポート番号は1〜65535で入力してください。") from error
+    if not 1 <= port <= 65535:
+        raise OBSSettingsError("ポート番号は1〜65535で入力してください。")
+    return port
+
+
+def load_obs_port():
     parser = configparser.ConfigParser()
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8-sig") as settings_file:
             parser.read_file(settings_file)
-    except (OSError, configparser.Error) as error:
-        raise ValueError(f"settings.ini を読み込めません: {error}") from error
-    return parser.getboolean("settings", "spectator_mode", fallback=True)
+        return parse_obs_port(parser.get("obs", "port", fallback=str(DEFAULT_OBS_PORT)))
+    except (OSError, configparser.Error, OBSSettingsError) as error:
+        raise OBSSettingsError(f"OBSポートを読み込めません: {error}") from error
 
 
-def get_spectator_mode_enabled():
-    with live_state_lock:
-        return spectator_mode_enabled
-
-
-def save_spectator_mode_enabled(enabled):
-    parser = configparser.ConfigParser()
+def save_obs_port(port):
+    port = parse_obs_port(str(port))
     try:
-        with open(CONFIG_PATH, "r", encoding="utf-8-sig") as settings_file:
-            parser.read_file(settings_file)
-        if not parser.has_section("settings"):
-            parser.add_section("settings")
-        parser.set("settings", "spectator_mode", "true" if enabled else "false")
-
-        temporary_path = CONFIG_PATH + ".tmp"
-        try:
-            with open(temporary_path, "w", encoding="utf-8") as settings_file:
-                parser.write(settings_file)
-            os.replace(temporary_path, CONFIG_PATH)
-        except OSError:
-            if os.path.exists(temporary_path):
-                os.remove(temporary_path)
-            raise
+        write_settings_value("obs", "port", str(port))
     except (OSError, configparser.Error) as error:
-        raise ValueError(f"観戦モード設定を保存できません: {error}") from error
+        raise OBSSettingsError(f"OBSポートを保存できません: {error}") from error
 
-    global spectator_mode_enabled
-    with live_state_lock:
-        spectator_mode_enabled = enabled
+
+def obs_credential_api():
+    if sys.platform != "win32":
+        raise OBSSettingsError("パスワードの保存にはWindows資格情報マネージャーが必要です。")
+    try:
+        from win32ctypes.pywin32 import pywintypes, win32cred
+    except ImportError as error:
+        raise OBSSettingsError("Windows資格情報マネージャーを利用できません。") from error
+    return win32cred, pywintypes.error
+
+
+def load_obs_password():
+    win32cred, credential_error = obs_credential_api()
+    try:
+        credential = win32cred.CredRead(
+            TargetName=OBS_CREDENTIAL_TARGET, Type=win32cred.CRED_TYPE_GENERIC
+        )
+    except credential_error as error:
+        if error.winerror == 1168:
+            return None
+        raise OBSSettingsError("保存済みパスワードを読み込めません。") from error
+    try:
+        blob = credential["CredentialBlob"]
+        if not isinstance(blob, bytes):
+            raise TypeError("credential blob must be bytes")
+        return blob.decode("utf-16-le")
+    except (KeyError, TypeError, UnicodeError) as error:
+        raise OBSSettingsError("保存済みパスワードの形式が不正です。") from error
+
+
+def save_obs_password(password):
+    if not password:
+        raise OBSSettingsError("保存するパスワードを入力してください。")
+    win32cred, credential_error = obs_credential_api()
+    try:
+        win32cred.CredWrite({
+            "Type": win32cred.CRED_TYPE_GENERIC,
+            "TargetName": OBS_CREDENTIAL_TARGET,
+            "UserName": OBS_CREDENTIAL_USERNAME,
+            "CredentialBlob": password,
+            "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE,
+        }, 0)
+    except (credential_error, ValueError) as error:
+        raise OBSSettingsError("パスワードをWindows資格情報マネージャーに保存できません。") from error
+
+
+def delete_obs_password():
+    win32cred, credential_error = obs_credential_api()
+    try:
+        win32cred.CredDelete(OBS_CREDENTIAL_TARGET, win32cred.CRED_TYPE_GENERIC, 0)
+    except credential_error as error:
+        if error.winerror == 1168:
+            return False
+        raise OBSSettingsError("保存済みパスワードを削除できません。") from error
+    return True
 
 
 def get_language_code():
@@ -2488,6 +3160,18 @@ def is_spectator_game_data(data):
 
 def serve_static_json(json_key):
     filename, data_dragon_filename = STATIC_JSON_FILES[json_key]
+    return serve_data_dragon_json(filename, data_dragon_filename)
+
+
+def serve_champion_json(champion_name):
+    if not re.fullmatch(r"[A-Za-z0-9]+", champion_name):
+        return jsonify({"ok": False, "error": "チャンピオン名が不正です。"}), 400
+
+    filename = f"{champion_name}.json"
+    return serve_data_dragon_json(filename, f"champion/{filename}", "champion")
+
+
+def serve_data_dragon_json(filename, data_dragon_filename, subdirectory=None):
     try:
         language = get_language_code()
     except ValueError as error:
@@ -2501,94 +3185,48 @@ def serve_static_json(json_key):
             return jsonify({"ok": False, "error": str(error)}), 500
 
         language_json_dir = os.path.join(JSON_DIR, language)
+        if subdirectory:
+            language_json_dir = os.path.join(language_json_dir, subdirectory)
         path = os.path.join(language_json_dir, filename)
         url = (
             f"https://ddragon.leagueoflegends.com/cdn/{data_dragon_version}"
             f"/data/{language}/{data_dragon_filename}"
         )
-        os.makedirs(language_json_dir, exist_ok=True)
-
-        if not os.path.exists(path):
-            try:
-                r = requests.get(url, timeout=2)
-                r.raise_for_status()
-
-                with open(path, "w", encoding="utf-8") as f:
-                    json.dump(r.json(), f, ensure_ascii=False, indent=2)
-
-            except Exception as e:
-                print(f"{filename} ({language}) のダウンロードに失敗:", e)
-                return jsonify({
-                    "ok": False,
-                    "error": f"{filename} ({language}) の取得に失敗しました: {e}"
-                }), 500
-
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-            return jsonify({"ok": True, "data": data})
-        except Exception as e:
-            return jsonify({"ok": False, "error": str(e)}), 500
-
-
-def serve_champion_json(champion_name):
-    if not re.fullmatch(r"[A-Za-z0-9]+", champion_name):
-        return jsonify({"ok": False, "error": "チャンピオン名が不正です。"}), 400
-
-    try:
-        language = get_language_code()
-    except ValueError as error:
-        print(error)
-        return jsonify({"ok": False, "error": str(error)}), 500
-
-    with data_dragon_cache_lock:
-        try:
-            data_dragon_version = get_installed_data_dragon_version()
-        except DataDragonUpdateError as error:
+            os.makedirs(language_json_dir, exist_ok=True)
+        except OSError as error:
             return jsonify({"ok": False, "error": str(error)}), 500
 
-        champion_json_dir = os.path.join(JSON_DIR, language, "champion")
-        filename = f"{champion_name}.json"
-        path = os.path.join(champion_json_dir, filename)
-        url = (
-            f"https://ddragon.leagueoflegends.com/cdn/{data_dragon_version}"
-            f"/data/{language}/champion/{filename}"
-        )
-        os.makedirs(champion_json_dir, exist_ok=True)
-
         if not os.path.exists(path):
+            temporary_path = None
             try:
-                response = requests.get(url, timeout=2)
-                response.raise_for_status()
-
-                with open(path, "w", encoding="utf-8") as data_file:
-                    json.dump(response.json(), data_file, ensure_ascii=False, indent=2)
-            except Exception as error:
+                with requests.get(url, timeout=2) as response:
+                    response.raise_for_status()
+                    data = response.json()
+                with tempfile.NamedTemporaryFile(
+                    "w", encoding="utf-8", dir=language_json_dir,
+                    prefix=".data-dragon-", suffix=".tmp", delete=False,
+                ) as data_file:
+                    temporary_path = data_file.name
+                    json.dump(data, data_file, ensure_ascii=False, indent=2)
+                os.replace(temporary_path, path)
+            except (requests.RequestException, OSError, ValueError, TypeError) as error:
                 print(f"{filename} ({language}) のダウンロードに失敗:", error)
                 return jsonify({
                     "ok": False,
                     "error": f"{filename} ({language}) の取得に失敗しました: {error}"
                 }), 500
+            finally:
+                if temporary_path is not None and os.path.exists(temporary_path):
+                    os.remove(temporary_path)
 
         try:
             with open(path, "r", encoding="utf-8") as data_file:
                 data = json.load(data_file)
             return jsonify({"ok": True, "data": data})
-        except Exception as error:
+        except (OSError, ValueError) as error:
             return jsonify({"ok": False, "error": str(error)}), 500
 
-
-def get_html_files(self):
-    """HTML ファイルの一覧を取得"""
-    import os
-    html_dir = os.path.join(APP_DIR, "html")
-    files = []
-    for filename in sorted(os.listdir(html_dir)):
-        if os.path.isfile(os.path.join(html_dir, filename)) and filename.endswith('.html'):
-            filepath = os.path.join("html", filename)
-            url = f'<code>{filepath}</code> <a href="/html/{filename}" target="_blank">📂 表示</a>'
-            files.append((filename, url))
-    return files
 
 @app.route("/html/<path:filename>")
 def overlay_html(filename):
@@ -2618,8 +3256,7 @@ def allgamedata():
     data = response.get("data")
     if observe_live_api(response) and isinstance(data, dict):
         data["isSpectatorMode"] = is_spectator_game_data(data)
-        if get_spectator_mode_enabled():
-            data["spectatorData"] = get_spectator_data()
+        data["spectatorData"] = get_spectator_data()
     return jsonify(response)
 
 

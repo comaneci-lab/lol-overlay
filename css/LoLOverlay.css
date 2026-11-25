@@ -353,6 +353,13 @@ body {
     height: var(--scoreboard-display-height);
 }
 
+#ScoreBord[hidden],
+#goldChartWidget[hidden],
+#goldChart[hidden],
+#RoleGoldDiff[hidden] {
+    display: none !important;
+}
+
 #ScoreBord {
     position: absolute;
     left: 0;
@@ -423,16 +430,64 @@ body {
 
 /* GoldChart.js のキャンバス寸法。幅は表示枠に合わせる。 */
 #goldChart {
-    width: var(--scoreboard-display-width);
+    width: 100%;
     height: 150px;
 }
 
-#overlay-canvas > #goldChart {
+#goldChartWidget {
+    width: var(--scoreboard-display-width);
+    background: var(--chart-background, rgba(0, 0, 0, 0.9));
+}
+
+#overlay-canvas > #goldChartWidget {
     position: absolute;
     left: var(--gold-chart-left);
     bottom: var(--gold-chart-bottom);
     transform: scale(var(--gold-chart-scale));
     transform-origin: left bottom;
+}
+
+.gold-chart-event-row {
+    display: flex;
+    align-items: stretch;
+    height: 30px;
+}
+
+.gold-chart-event-label {
+    width: 40px;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 8px;
+    text-shadow: 0 1px 2px #000;
+}
+
+.gold-chart-event-timeline {
+    position: relative;
+    flex: 1;
+    margin-right: 20px;
+}
+
+.gold-chart-event-marker {
+    position: absolute;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transform: translateX(-50%);
+}
+
+.gold-chart-event-marker img {
+    width: 22px;
+    height: 22px;
+}
+
+.gold-chart-kill-dot {
+    display: block;
+    border-radius: 50%;
+    box-shadow: 0 0 2px #000;
 }
 
 .overlay-wrapper {
@@ -474,29 +529,47 @@ body {
 
 .live-client-data-unavailable .topbar-widget,
 .live-client-data-unavailable .scoreboard-widget,
+.live-client-data-unavailable #goldChartWidget,
 .live-client-data-unavailable #goldChart,
 .live-client-data-unavailable .role-gold-diff-widget,
 .live-client-data-unavailable .active-player-cs,
-.live-client-data-unavailable .skill-level-up-widget {
+.live-client-data-unavailable .skill-item-notification-widgets,
+.game-start-pending .topbar-widget,
+.game-start-pending .scoreboard-widget,
+.game-start-pending #goldChartWidget,
+.game-start-pending #goldChart {
     display: none !important;
 }
 
-.skill-level-up-widget {
+.skill-item-notification-widgets {
     position: absolute;
     top: var(--skill-level-up-top);
     left: 50%;
-    display: flex;
-    justify-content: center;
-    gap: 8px;
     transform: translateX(-50%);
     pointer-events: none;
 }
 
-.skill-level-up-widget[hidden] {
+.skill-level-up-widget,
+.item-purchase-widget {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+}
+
+.item-purchase-widget {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+}
+
+.skill-level-up-widget[hidden],
+.item-purchase-widget[hidden] {
     display: none;
 }
 
-.skill-level-up-widget img {
+.skill-level-up-widget img,
+.item-purchase-widget img {
     width: 48px;
     height: 48px;
     zoom: var(--skill-level-up-icon-scale, 1);

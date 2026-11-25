@@ -1,3 +1,4 @@
+const CHAMPION_MAP_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL"];
 const markerLayer = document.getElementById("champion-map-markers");
 const championMarkers = new Map();
 const towerMarkers = new Map();
@@ -652,7 +653,7 @@ async function refreshChampionOverlay() {
             resetMapMarkers();
         }
         lastOverlayGameTime = gameTime;
-        if (!["CLASSIC", "PRACTICETOOL"].includes(gameMode)) {
+        if (!CHAMPION_MAP_ALLOWED_GAME_MODES.includes(gameMode)) {
             resetMapMarkers();
             return;
         }

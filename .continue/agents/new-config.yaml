@@ -34,3 +34,27 @@ models:
     capabilities:
       - tool_use
       - image_input
+
+module: auth
+responsibilities:
+- ユーザー認証
+- JWT発行
+public_apis:
+- LoginService.login
+- LoginService.logout
+dependencies:
+- Logger
+- ConfigManager
+repeated_patterns:
+- 入力検証
+- エラーハンドリング
+- ログ出力
+candidate_abstractions:
+- Validator
+- AuthContext
+technical_debt:
+- LoginServiceが肥大化
+summary: >
+認証処理を担当するモジュール。
+現状ではauthモジュールのコードが特定できませんでした。
+

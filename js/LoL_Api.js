@@ -10,6 +10,9 @@ let assignedPositions = new Map();
 let isGameInitialized = false;
 let CurrentEventID = 0;
 let liveClientDataAvailable = false;
+let gameStarted = false;
+let currentGameMode = "";
+let latestGameData = null;
 window.playerDict = {};
 window.isSpectatorMode = false;
 // ブラウザで参照できるように window に設定
@@ -50,6 +53,11 @@ function setPlayerDict(playerDict) {
 }
 
 function setOverlayDataAvailable(available) {
+    if (!available) {
+        currentGameMode = "";
+        latestGameData = null;
+        setGameStarted(false);
+    }
     if (!available && liveClientDataAvailable) {
         isGameInitialized = false;
         playerTeamMap = {};
@@ -88,6 +96,12 @@ function setOverlayDataAvailable(available) {
     liveClientDataAvailable = available;
     document.getElementById("overlay-canvas")
         ?.classList.toggle("live-client-data-unavailable", !available);
+}
+
+function setGameStarted(started) {
+    gameStarted = started;
+    document.getElementById("overlay-canvas")
+        ?.classList.toggle("game-start-pending", !started);
 }
 
 let teamStats = {
@@ -251,8 +265,13 @@ async function fetchGameData() {
             return null;
         }
 
+        const events = dataRoot.data?.events?.Events;
+        currentGameMode = String(dataRoot.data?.gameData?.gameMode ?? "").trim().toUpperCase();
+        setGameStarted(Array.isArray(events) &&
+            events.some(event => event?.EventName === "GameStart"));
         window.isSpectatorMode = isSpectatorGameData(dataRoot.data);
         setOverlayDataAvailable(true);
+        latestGameData = dataRoot.data;
 
         return dataRoot;
 
@@ -413,19 +432,23 @@ async function refreshPlayerDict() {
     }
 }
 
-function initPlayerTeamMap(dataRoot) {
-    const players = dataRoot.data.allPlayers;
-
+function makePlayerTeamMap(players) {
+    const teams = Object.create(null);
     players.forEach(p => {
         const identities = [p.riotIdGameName, p.summonerName, p.riotId];
         for (const identity of identities) {
             if (typeof identity === "string" && identity.trim()) {
                 const normalizedIdentity = identity.trim().toLowerCase();
-                playerTeamMap[normalizedIdentity] = p.team;
-                playerTeamMap[normalizedIdentity.split("#", 1)[0]] = p.team;
+                teams[normalizedIdentity] = p.team;
+                teams[normalizedIdentity.split("#", 1)[0]] = p.team;
             }
         }
     });
+    return teams;
+}
+
+function initPlayerTeamMap(dataRoot) {
+    playerTeamMap = makePlayerTeamMap(dataRoot.data.allPlayers);
 
     const activePlayer = dataRoot.data?.activePlayer;
     if (activePlayer) {
