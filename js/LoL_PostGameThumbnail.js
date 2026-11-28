@@ -1,4 +1,3 @@
-const POST_GAME_THUMBNAIL_URL = "/allgamedata";
 const POST_GAME_THUMBNAIL_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const POST_GAME_THUMBNAIL_POLL_INTERVAL = 1000;
 const POST_GAME_THUMBNAIL_UNAVAILABLE_LIMIT = 3;
@@ -82,29 +81,12 @@ function resetPostGameThumbnail(startEventId = null) {
     postGameThumbnailWidget.replaceChildren();
 }
 
-function normalizePostGameThumbnailIdentity(identity) {
-    if (typeof identity !== "string" || !identity.trim()) return [];
-    const normalized = identity.trim().toLowerCase();
-    return [normalized, normalized.split("#", 1)[0]];
-}
-
-function findPostGameThumbnailPlayer(activePlayer, players) {
-    const identities = new Set([
-        activePlayer?.riotIdGameName,
-        activePlayer?.summonerName,
-        activePlayer?.riotId
-    ].flatMap(normalizePostGameThumbnailIdentity));
+function findPostGameThumbnailPlayer(data, players) {
+    const activePlayer = data.activePlayer;
     const activeTeam = String(activePlayer?.team ?? "").toUpperCase();
     const activeChampion = String(activePlayer?.championName ?? "").trim().toLowerCase();
 
-    let matchedPlayer = players.find(player => {
-        const playerIdentities = [
-            player?.riotIdGameName,
-            player?.summonerName,
-            player?.riotId
-        ].flatMap(normalizePostGameThumbnailIdentity);
-        return playerIdentities.some(identity => identities.has(identity));
-    });
+    let matchedPlayer = findActivePlayer(data);
     if (!matchedPlayer && activeTeam && activeChampion) {
         matchedPlayer = players.find(player =>
             String(player?.team ?? "").toUpperCase() === activeTeam &&
@@ -162,7 +144,7 @@ function getPostGameThumbnailMatchup(players, activePlayer, rosterPlayer) {
     }
 
     const activeTeamName = String(activePlayer?.team ?? rosterPlayer?.team ?? "").toUpperCase();
-    const opponentTeam = teams.get(activeTeamName === "ORDER" ? "CHAOS" : "ORDER");
+    const opponentTeam = teams.get(getEnemyTeam(activeTeamName === "ORDER" ? "ORDER" : "CHAOS"));
     const role = assignedRoles.get(rosterPlayer) ??
         normalizePostGameThumbnailRole(rosterPlayer?.position ?? activePlayer?.position);
     return {
@@ -630,20 +612,9 @@ async function updatePostGameThumbnail() {
     if (postGameThumbnailUpdateInProgress) return;
     postGameThumbnailUpdateInProgress = true;
     try {
-        let response;
-        try {
-            response = await fetch(POST_GAME_THUMBNAIL_URL, { cache: "no-store" });
-        } catch (error) {
-            handlePostGameThumbnailUnavailable(error);
-            return;
-        }
-        if (!response.ok) {
-            handlePostGameThumbnailUnavailable(new Error(`status ${response.status}`));
-            return;
-        }
         let result;
         try {
-            result = await response.json();
+            result = await fetchLiveGameData();
         } catch (error) {
             handlePostGameThumbnailUnavailable(error);
             return;
@@ -657,13 +628,12 @@ async function updatePostGameThumbnail() {
             return;
         }
         postGameThumbnailUnavailableCount = 0;
-        const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
-        if (!POST_GAME_THUMBNAIL_ALLOWED_GAME_MODES.includes(gameMode)) {
+        if (!isAllowedGameMode(data, POST_GAME_THUMBNAIL_ALLOWED_GAME_MODES)) {
             resetPostGameThumbnail();
             return;
         }
 
-        const gameStart = events.find(event => event?.EventName === "GameStart");
+        const gameStart = findGameEvent(events, "GameStart");
         if (gameStart) {
             const startEventId = String(gameStart.EventID ?? gameStart.EventTime ?? "GameStart");
             if (!postGameThumbnailStarted || postGameThumbnailStartEventId !== startEventId) {
@@ -674,7 +644,7 @@ async function updatePostGameThumbnail() {
 
         const players = Array.isArray(data.allPlayers) ? data.allPlayers : [];
         const activePlayer = data.activePlayer ?? {};
-        const rosterPlayer = findPostGameThumbnailPlayer(activePlayer, players);
+        const rosterPlayer = findPostGameThumbnailPlayer(data, players);
         const matchup = getPostGameThumbnailMatchup(players, activePlayer, rosterPlayer);
         postGameThumbnailActivePlayer = activePlayer;
         postGameThumbnailRosterPlayer = rosterPlayer;
@@ -688,7 +658,7 @@ async function updatePostGameThumbnail() {
             postGameThumbnailStatRunes = fullRunes.statRunes;
         }
 
-        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        const gameTime = getGameTime(data);
         if (Number.isFinite(gameTime)) postGameThumbnailLastGameTime = gameTime;
         recordPostGameThumbnailInventory(
             rosterPlayer?.items ?? activePlayer.items,
@@ -703,7 +673,7 @@ async function updatePostGameThumbnail() {
             );
         }
         recordPostGameThumbnailSkills(activePlayer.abilities);
-        if (events.some(event => event?.EventName === "GameEnd")) {
+        if (isGameEnded(data)) {
             postGameThumbnailEnded = true;
         }
         renderPostGameThumbnail();

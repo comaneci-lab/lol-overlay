@@ -1,4 +1,3 @@
-const SKILL_LEVEL_UP_URL = "/allgamedata";
 const SKILL_LEVEL_UP_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const SKILL_LEVEL_UP_DURATION = 3000;
 const ITEM_PURCHASE_HOLD_DURATION = 5000;
@@ -81,21 +80,8 @@ function showSkillLevelUpIcon(id, now) {
 }
 
 function findItemPurchasePlayer(activePlayer, players) {
-    const identities = player => [player?.riotIdGameName, player?.summonerName, player?.riotId]
-        .filter(identity => typeof identity === "string" && identity.trim())
-        .map(identity => identity.trim().toLowerCase());
-    const activeIdentities = new Set(identities(activePlayer));
-    const exactMatches = players.filter(player =>
-        identities(player).some(identity => activeIdentities.has(identity))
-    );
-    if (exactMatches.length === 1) return exactMatches[0];
-    if (exactMatches.length === 0) {
-        const names = new Set([...activeIdentities].map(identity => identity.split("#", 1)[0]));
-        const nameMatches = players.filter(player =>
-            identities(player).some(identity => names.has(identity.split("#", 1)[0]))
-        );
-        if (nameMatches.length === 1) return nameMatches[0];
-    }
+    const identityMatch = findActivePlayer({ activePlayer, allPlayers: players });
+    if (identityMatch) return identityMatch;
 
     const team = String(activePlayer?.team ?? "").toUpperCase();
     const champion = String(activePlayer?.championName ?? "").trim().toLowerCase();
@@ -154,24 +140,18 @@ async function updateSkillLevelUp() {
     isUpdatingSkillLevelUp = true;
 
     try {
-        const response = await fetch(SKILL_LEVEL_UP_URL, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`status ${response.status}`);
-        }
-
-        const gameDataResponse = await response.json();
+        const gameDataResponse = await fetchLiveGameData();
         const data = gameDataResponse?.data;
         const activePlayer = data?.activePlayer;
         const abilities = activePlayer?.abilities;
-        const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
         if (gameDataResponse?.ok !== true || !activePlayer ||
             !abilities || typeof abilities !== "object" ||
-            !SKILL_LEVEL_UP_ALLOWED_GAME_MODES.includes(gameMode)) {
+            !isAllowedGameMode(data, SKILL_LEVEL_UP_ALLOWED_GAME_MODES)) {
             resetSkillLevelUp();
             return;
         }
 
-        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        const gameTime = getGameTime(data);
         const now = Date.now();
         const currentAbilities = new Map();
         for (const ability of Object.values(abilities)) {

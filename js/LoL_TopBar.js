@@ -194,12 +194,9 @@ async function updateTopbarFromGameData(gameTime) {
         order: getTeamStats("ORDER", teamStats.ORDER),
         chaos: getTeamStats("CHAOS", teamStats.CHAOS)
     });
-    const ownTeam = window.isSpectatorMode
-        ? teamStats.ORDER
-        : window.myTeam === "CHAOS" ? teamStats.CHAOS : teamStats.ORDER;
-    const enemyTeam = window.isSpectatorMode
-        ? teamStats.CHAOS
-        : window.myTeam === "CHAOS" ? teamStats.ORDER : teamStats.CHAOS;
+    const ownTeamName = !window.isSpectatorMode && isChaosTeam(window.myTeam) ? "CHAOS" : "ORDER";
+    const ownTeam = teamStats[ownTeamName];
+    const enemyTeam = teamStats[getEnemyTeam(ownTeamName)];
     renderBuffTimers(ownTeam, "own-buffs", gameTime);
     renderBuffTimers(enemyTeam, "enemy-buffs", gameTime);
     renderDragons(teamStats.ORDER.Dragons, "order-dragons");
@@ -216,16 +213,14 @@ async function refreshTopbar() {
     try {
         let gameTime;
         try {
-            const gameDataResp = await fetch("/allgamedata", { cache: "no-store" });
-            if (!gameDataResp.ok) throw new Error(`status ${gameDataResp.status}`);
-            const gameDataResponse = await gameDataResp.json();
+            const gameDataResponse = await fetchLiveGameData();
             if (gameDataResponse?.ok !== true || !Array.isArray(gameDataResponse.data?.allPlayers)) {
                 topbarWidget.hidden = true;
                 setOverlayDataAvailable(false);
                 return;
             }
 
-            const gameMode = String(gameDataResponse.data?.gameData?.gameMode ?? "").toUpperCase();
+            const gameMode = getGameMode(gameDataResponse.data);
             window.isSpectatorMode = isSpectatorGameData(gameDataResponse.data);
             if (window.isSpectatorMode && !gameDataResponse.data?.spectatorData) {
                 topbarWidget.hidden = true;

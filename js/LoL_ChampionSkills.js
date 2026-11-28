@@ -1,4 +1,3 @@
-const CHAMPION_SKILLS_GAME_DATA_URL = "/allgamedata";
 const CHAMPION_SKILLS_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const CHAMPION_SKILLS_INDEX_URL = "/champions";
 const CHAMPION_SKILLS_DATA_URL = "/champion";
@@ -952,11 +951,7 @@ async function updateChampionSkills() {
     try {
         let result;
         try {
-            const response = await fetch(CHAMPION_SKILLS_GAME_DATA_URL, { cache: "no-store" });
-            if (!response.ok) {
-                throw new Error(`game data request failed: status ${response.status}`);
-            }
-            result = await response.json();
+            result = await fetchLiveGameData();
         } catch (error) {
             console.error("failed to fetch champion skills game data", error);
             championSkillsCanvas.hidden = false;
@@ -984,8 +979,7 @@ async function updateChampionSkills() {
             return;
         }
 
-        const gameMode = String(result.data?.gameData?.gameMode ?? "").trim().toUpperCase();
-        championSkillsCanvas.hidden = !CHAMPION_SKILLS_ALLOWED_GAME_MODES.includes(gameMode);
+        championSkillsCanvas.hidden = !isAllowedGameMode(result.data, CHAMPION_SKILLS_ALLOWED_GAME_MODES);
         if (championSkillsCanvas.hidden) return;
 
         championSkillsEndPollFailures = 0;

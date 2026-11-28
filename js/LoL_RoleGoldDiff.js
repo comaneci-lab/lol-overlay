@@ -46,7 +46,7 @@ function updateRoleGoldDiff(playerDict) {
     }
 
     const myTeam = window.myTeam;
-    const enemyTeam = myTeam === "ORDER" ? "CHAOS" : myTeam === "CHAOS" ? "ORDER" : null;
+    const enemyTeam = getEnemyTeam(myTeam);
     const playersByRole = new Map();
 
     for (const player of Object.values(playerDict ?? {})) {

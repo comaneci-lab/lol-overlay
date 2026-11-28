@@ -55,6 +55,7 @@ class Element {
 function createOverlay(options = {}) {
     const canvas = new Element("div");
     let response = { ok: false, error: "not available" };
+    let httpStatus = 200;
     const errors = [];
     const context = vm.createContext({
         document: {
@@ -64,7 +65,7 @@ function createOverlay(options = {}) {
         window: { setInterval() {} },
         fetch: async url => {
             if (url === "/allgamedata") {
-                return { ok: true, json: async () => response };
+                return { ok: httpStatus === 200, status: httpStatus, json: async () => response };
             }
             if (url === "/runes") {
                 if (options.runesUnavailable) return { ok: false, status: 500 };
@@ -115,6 +116,7 @@ function createOverlay(options = {}) {
         console: { error: (...args) => errors.push(args) }
     });
 
+    vm.runInContext(fs.readFileSync(path.join(root, "js", "LoL_Api.js"), "utf8"), context);
     vm.runInContext(
         fs.readFileSync(path.join(root, "js", "LoL_PostGameThumbnail.js"), "utf8"),
         context
@@ -123,6 +125,7 @@ function createOverlay(options = {}) {
         context,
         errors,
         setResponse(value) { response = value; },
+        setHttpStatus(value) { httpStatus = value; },
         async update() {
             await vm.runInContext("updatePostGameThumbnail()", context);
         },
@@ -344,4 +347,22 @@ test("keeps rune names visible when metadata cannot be loaded", async () => {
     );
     assert.equal(overlay.errors.some(args =>
         String(args[0]).includes("rune metadata")), true);
+});
+
+test("thumbnail tolerates transient HTTP errors before clearing on the third failure", async () => {
+    const overlay = createOverlay();
+    await new Promise(resolve => setImmediate(resolve));
+    const events = [{ EventID: 1, EventName: "GameStart" }, { EventID: 2, EventName: "GameEnd" }];
+    overlay.setResponse(gameData(events));
+    await overlay.update();
+    assert.equal(overlay.isHidden(), false);
+    overlay.setHttpStatus(503);
+    await overlay.update();
+    await overlay.update();
+    assert.equal(overlay.isHidden(), false);
+    await overlay.update();
+    assert.equal(overlay.isHidden(), true);
+    overlay.setHttpStatus(200);
+    await overlay.update();
+    assert.equal(overlay.isHidden(), false);
 });

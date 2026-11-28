@@ -55,6 +55,8 @@ class Element {
 function createOverlay() {
     const canvas = new Element("div");
     let response = { ok: false, error: "not available" };
+    let httpStatus = 200;
+    let fetchError = null;
     const errors = [];
     const context = vm.createContext({
         document: {
@@ -64,7 +66,8 @@ function createOverlay() {
         window: { setInterval() {} },
         fetch: async url => {
             if (url === "/allgamedata") {
-                return { ok: true, json: async () => response };
+                if (fetchError) throw fetchError;
+                return { ok: httpStatus === 200, status: httpStatus, json: async () => response };
             }
             if (url === "/champions") {
                 return {
@@ -89,6 +92,7 @@ function createOverlay() {
         console: { error: (...args) => errors.push(args) }
     });
 
+    vm.runInContext(fs.readFileSync(path.join(root, "js", "LoL_Api.js"), "utf8"), context);
     vm.runInContext(
         fs.readFileSync(path.join(root, "js", "LoL_MatchOrder.js"), "utf8"),
         context
@@ -98,6 +102,8 @@ function createOverlay() {
         context,
         errors,
         setResponse(value) { response = value; },
+        setHttpStatus(value) { httpStatus = value; },
+        setFetchError(value) { fetchError = value; },
         async update() {
             await vm.runInContext("updateMatchOrder()", context);
         },
@@ -225,4 +231,45 @@ test("unsupported modes clear match history and do not display the result", asyn
     await overlay.update();
     assert.equal(vm.runInContext("matchOrderStarted", overlay.context), true);
     assert.equal(overlay.isHidden(), true);
+});
+
+test("transient fetch failures preserve history, and team/champion fallback finds inventory", async () => {
+    const overlay = createOverlay();
+    await new Promise(resolve => setImmediate(resolve));
+    const data = gameData([gameStart], {}, [], 0);
+    data.data.activePlayer.riotIdGameName = "";
+    data.data.activePlayer.summonerName = "";
+    overlay.setResponse(data);
+    await overlay.update();
+    const fetchErrorsBefore = overlay.errors.filter(args => args[0] === "failed to fetch match order game data").length;
+    overlay.setHttpStatus(503);
+    await overlay.update();
+    overlay.setHttpStatus(200);
+    overlay.setFetchError(new Error("network"));
+    await overlay.update();
+    assert.equal(vm.runInContext("matchOrderStarted", overlay.context), true);
+    assert.equal(overlay.errors.filter(args => args[0] === "failed to fetch match order game data").length, fetchErrorsBefore + 1);
+    overlay.setFetchError(null);
+    data.data.allPlayers[0].items = [{ itemID: 1001 }];
+    data.data.gameData.gameTime = 65;
+    await overlay.update();
+    assert.deepEqual(Array.from(vm.runInContext("matchOrderPurchases.map(item => item.itemId)", overlay.context)), [1001]);
+    assert.equal(vm.runInContext("matchOrderUnavailableCount", overlay.context), 0);
+});
+
+test("tagless identity matches and a new start event resets the recorded order", async () => {
+    const overlay = createOverlay();
+    await new Promise(resolve => setImmediate(resolve));
+    const data = gameData([gameStart], {}, [], 0);
+    data.data.activePlayer = { riotId: " Player#NA1 " };
+    overlay.setResponse(data);
+    await overlay.update();
+    data.data.allPlayers[0].items = [{ itemID: 1001 }];
+    data.data.gameData.gametime = 60;
+    delete data.data.gameData.gameTime;
+    await overlay.update();
+    assert.deepEqual(Array.from(vm.runInContext("matchOrderPurchases.map(item => item.itemId)", overlay.context)), [1001]);
+    data.data.events.Events = [{ EventID: 2, EventName: "GameStart" }];
+    await overlay.update();
+    assert.deepEqual(Array.from(vm.runInContext("matchOrderPurchases", overlay.context)), []);
 });

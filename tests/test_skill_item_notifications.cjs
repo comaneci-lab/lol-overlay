@@ -33,11 +33,16 @@ async function createOverlay() {
             getElementById: () => canvas,
             createElement: () => new Element()
         },
+        window: {},
         Date: { now: () => now },
         setInterval() {},
         fetch: async () => ({ ok: true, json: async () => response }),
         console: { error() {} }
     });
+    vm.runInContext(
+        fs.readFileSync(path.join(__dirname, "..", "js", "LoL_Api.js"), "utf8"),
+        context
+    );
     vm.runInContext(
         fs.readFileSync(path.join(__dirname, "..", "js", "LoL_SkillLevelUp.js"), "utf8"),
         context
@@ -136,4 +141,32 @@ test("matches the active player without confusing players with the same game nam
         [{ riotId: "Player#ONE" }, { riotId: "Player#TWO" }]
     )`, overlay.context);
     assert.equal(ambiguous, null);
+    const tagless = vm.runInContext(`findItemPurchasePlayer(
+        { riotId: " Player#ONE " },
+        [{ riotIdGameName: "player" }]
+    ).riotIdGameName`, overlay.context);
+    assert.equal(tagless, "player");
+    const conflicting = vm.runInContext(`findItemPurchasePlayer(
+        { riotId: "Player#ONE", riotIdGameName: "Player" },
+        [{ riotId: "Player#TWO", riotIdGameName: "Player" }]
+    )`, overlay.context);
+    assert.equal(conflicting, null);
+    const fullId = vm.runInContext(`findItemPurchasePlayer(
+        { riotId: "Player#ONE", riotIdGameName: "Player" },
+        [{ riotId: "Player#TWO", riotIdGameName: "Player" },
+         { riotId: "Player#ONE", riotIdGameName: "Player" },
+         { riotIdGameName: "Player" }]
+    ).riotId`, overlay.context);
+    assert.equal(fullId, "Player#ONE");
+    const fallback = vm.runInContext(`findItemPurchasePlayer(
+        { riotId: "Player#ONE", team: "ORDER", championName: "Ahri" },
+        [{ riotId: "Player#TWO", team: "ORDER", championName: "Ahri" }]
+    ).riotId`, overlay.context);
+    assert.equal(fallback, "Player#TWO");
+    const ambiguousFallback = vm.runInContext(`findItemPurchasePlayer(
+        { riotIdGameName: "Player", team: "ORDER", championName: "Ahri" },
+        [{ riotId: "Player#ONE", team: "ORDER", championName: "Ahri" },
+         { riotId: "Player#TWO", team: "ORDER", championName: "Ahri" }]
+    )`, overlay.context);
+    assert.equal(ambiguousFallback, null);
 });

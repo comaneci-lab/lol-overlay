@@ -98,7 +98,7 @@ function renderGoldChartEvents(events, players) {
     container.replaceChildren();
 
     for (const team of ["ORDER", "CHAOS"]) {
-        const ally = window.isSpectatorMode ? team === "ORDER" : team === window.myTeam;
+        const ally = isAllyTeam(team);
         const row = document.createElement("div");
         row.className = "gold-chart-event-row";
         row.style.background = ally
@@ -307,17 +307,14 @@ function makeTrace(start, end, sign, startZeroX = null, endZeroX = null) {
     // 観戦時は ORDER リードを青、CHAOS リードを赤に固定する。
     // 通常プレイ時は自チームのリードを青、相手のリードを赤にする。
     let color, fillColor;
-    if (window.isSpectatorMode) {
-        color = sign >= 0 ? allyColor : enemyColor;
-        fillColor = sign >= 0 ? allyFill : enemyFill;
-    } else if (sign >= 0) {
+    if (sign >= 0) {
         // ORDER がリード
-        color = (window.myTeam === 'ORDER') ? allyColor : enemyColor;
-        fillColor = (window.myTeam === 'ORDER') ? allyFill : enemyFill;
+        color = isAllyTeam("ORDER") ? allyColor : enemyColor;
+        fillColor = isAllyTeam("ORDER") ? allyFill : enemyFill;
     } else {
         // CHAOS がリード
-        color = (window.myTeam === 'CHAOS') ? allyColor : enemyColor;
-        fillColor = (window.myTeam === 'CHAOS') ? allyFill : enemyFill;
+        color = isAllyTeam("CHAOS") ? allyColor : enemyColor;
+        fillColor = isAllyTeam("CHAOS") ? allyFill : enemyFill;
     }
 
     return {
@@ -391,7 +388,7 @@ function resetGoldChart() {
 // グラフを更新（1本の折れ線で常に連続させる）
 function updateGoldChart(playerDict, gameData) {
     const gameTime = gameData?.gameData?.gameTime ?? gameData?.gameData?.gametime;
-    const elapsed = gameTime == null ? NaN : Number(gameTime);
+    const elapsed = getGameTime(gameData);
     if (!Number.isFinite(elapsed) || elapsed < 0) {
         warnGoldChartOnce("gameTime", "ゴールドチャート: 試合時刻を取得できません", gameTime);
         return;

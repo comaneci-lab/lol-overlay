@@ -506,27 +506,6 @@ function getChampionKey(player) {
     return `${player.riotId ?? player.summonerName ?? player.championName ?? "Unknown"}_${player.team ?? "Unknown"}`;
 }
 
-function getMyTeam(data, players) {
-    const activePlayer = data?.activePlayer;
-    if (["ORDER", "CHAOS"].includes(activePlayer?.team)) {
-        return activePlayer.team;
-    }
-
-    const activePlayerIds = [
-        activePlayer?.riotId,
-        activePlayer?.riotIdGameName,
-        activePlayer?.summonerName
-    ]
-        .filter(id => typeof id === "string" && id.trim())
-        .map(id => id.trim().toLowerCase());
-
-    const player = players.find(candidate =>
-        [candidate.riotId, candidate.riotIdGameName, candidate.summonerName]
-            .some(id => typeof id === "string" && activePlayerIds.includes(id.trim().toLowerCase()))
-    );
-    return ["ORDER", "CHAOS"].includes(player?.team) ? player.team : null;
-}
-
 function getPositionOnRoute(route, gameTime, role, playerKey) {
     const cycleSeconds = role === "JUNGLE" ? 165 : role === "TOP" ? 245 : 210;
     const offset = [...playerKey].reduce((sum, character) => sum + character.charCodeAt(0), 0) % cycleSeconds;
@@ -636,14 +615,10 @@ async function refreshChampionOverlay() {
     refreshInProgress = true;
 
     try {
-        const response = await fetch("/allgamedata", { cache: "no-store" });
-        if (!response.ok) throw new Error(`game data status ${response.status}`);
-        const result = await response.json();
+        const result = await fetchLiveGameData();
         const data = result?.data;
         const players = data?.allPlayers;
-        const myTeam = getMyTeam(data, players ?? []);
-        const gameMode = data?.gameData?.gameMode;
-        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        const gameTime = getGameTime(data);
         const events = data?.events?.Events ?? [];
 
         if (result?.ok !== true || !Array.isArray(players) || !Array.isArray(events) || !Number.isFinite(gameTime)) {
@@ -653,10 +628,14 @@ async function refreshChampionOverlay() {
             resetMapMarkers();
         }
         lastOverlayGameTime = gameTime;
-        if (!CHAMPION_MAP_ALLOWED_GAME_MODES.includes(gameMode)) {
+        if (!isAllowedGameMode(data, CHAMPION_MAP_ALLOWED_GAME_MODES)) {
             resetMapMarkers();
             return;
         }
+        const activeTeam = data?.activePlayer?.team;
+        const matchedTeam = findActivePlayer(data)?.team;
+        const myTeam = ["ORDER", "CHAOS"].includes(activeTeam) ? activeTeam
+            : ["ORDER", "CHAOS"].includes(matchedTeam) ? matchedTeam : null;
         const destroyedTowers = updateTowerMarkers(events, myTeam);
         updateMinionMarkers(gameTime, destroyedTowers, myTeam);
         if (!championIconsByName) await loadChampionIcons();

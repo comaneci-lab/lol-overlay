@@ -1,4 +1,3 @@
-const ACTIVE_PLAYER_CS_URL = "/allgamedata";
 const CS_PER_MINUTE_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const activePlayerCsElement = document.getElementById("active-player-cs");
 
@@ -6,24 +5,13 @@ function getActivePlayerCs(playerData) {
     const data = playerData?.data;
     const activePlayer = data?.activePlayer;
     const allPlayers = data?.allPlayers;
-    const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+    const gameTime = getGameTime(data);
 
     if (!activePlayer || !Array.isArray(allPlayers) || !Number.isFinite(gameTime) || gameTime <= 0) {
         return null;
     }
 
-    const activePlayerIds = [
-        activePlayer.riotId,
-        activePlayer.riotIdGameName,
-        activePlayer.summonerName
-    ].filter(Boolean);
-    const player = allPlayers.find(candidate =>
-        activePlayerIds.some(id =>
-            id === candidate.riotId ||
-            id === candidate.riotIdGameName ||
-            id === candidate.summonerName
-        )
-    );
+    const player = findActivePlayer(data);
 
     if (!player) {
         return null;
@@ -47,14 +35,8 @@ function getActivePlayerCs(playerData) {
 
 async function updateActivePlayerCs() {
     try {
-        const response = await fetch(ACTIVE_PLAYER_CS_URL, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`status ${response.status}`);
-        }
-
-        const playerData = await response.json();
-        const gameMode = String(playerData?.data?.gameData?.gameMode ?? "").trim().toUpperCase();
-        if (playerData?.ok !== true || !CS_PER_MINUTE_ALLOWED_GAME_MODES.includes(gameMode)) {
+        const playerData = await fetchLiveGameData();
+        if (playerData?.ok !== true || !isAllowedGameMode(playerData.data, CS_PER_MINUTE_ALLOWED_GAME_MODES)) {
             activePlayerCsElement.hidden = true;
             return;
         }

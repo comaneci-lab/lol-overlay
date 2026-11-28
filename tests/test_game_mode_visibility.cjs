@@ -38,6 +38,8 @@ function createOverlay(file) {
         fetch: async () => ({ ok: true, json: async () => response }),
         console: { error() {}, log() {}, warn() {}, groupCollapsed() {}, table() {}, groupEnd() {} }
     });
+    const api = fs.readFileSync(path.join(__dirname, "..", "js", "LoL_Api.js"), "utf8");
+    vm.runInContext(api, context);
     const source = fs.readFileSync(path.join(__dirname, "..", "js", file), "utf8");
     vm.runInContext(source, context);
     return {
@@ -67,6 +69,21 @@ test("CS is shown only in configured modes and can reappear", async () => {
         await overlay.update("updateActivePlayerCs()");
         assert.equal(overlay.canvas.hidden, hidden);
     }
+});
+
+test("CS matches normalized active player identities", async () => {
+    const overlay = createOverlay("LoL_CSPerMinute.js");
+    await new Promise(resolve => setImmediate(resolve));
+    const data = gameData("CLASSIC");
+    data.data.activePlayer = { riotIdGameName: " Player " };
+    data.data.allPlayers[0].riotId = "player#JP1";
+    overlay.setResponse(data);
+    await overlay.update("updateActivePlayerCs()");
+    assert.equal(overlay.canvas.textContent, "10.0CS/分");
+    assert.equal(overlay.canvas.hidden, false);
+    data.data.activePlayer.riotIdGameName = "someone else";
+    await overlay.update("updateActivePlayerCs()");
+    assert.equal(overlay.canvas.hidden, true);
 });
 
 test("object timer hides unsupported modes and starts fresh in a supported mode", async () => {

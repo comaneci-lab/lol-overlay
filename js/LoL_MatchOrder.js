@@ -1,4 +1,3 @@
-const MATCH_ORDER_URL = "/allgamedata";
 const MATCH_ORDER_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const MATCH_ORDER_POLL_INTERVAL = 1000;
 const MATCH_ORDER_UNAVAILABLE_LIMIT = 3;
@@ -44,36 +43,11 @@ function resetMatchOrder(startEventId) {
     matchOrderWidget.replaceChildren();
 }
 
-function normalizeMatchOrderIdentity(identity) {
-    if (typeof identity !== "string" || !identity.trim()) return [];
-    const normalized = identity.trim().toLowerCase();
-    return [normalized, normalized.split("#", 1)[0]];
-}
-
-function findMatchOrderPlayer(activePlayer, players) {
-    const identities = new Set();
-    for (const identity of [
-        activePlayer?.riotIdGameName,
-        activePlayer?.summonerName,
-        activePlayer?.riotId
-    ]) {
-        for (const variant of normalizeMatchOrderIdentity(identity)) {
-            identities.add(variant);
-        }
-    }
-
+function findMatchOrderPlayer(data, players) {
+    const activePlayer = data.activePlayer;
     const activeTeam = String(activePlayer?.team ?? "").toUpperCase();
     const activeChampion = String(activePlayer?.championName ?? "").trim().toLowerCase();
-    let matchedPlayer = players.find(player => {
-        const sameTeam = activeTeam && String(player?.team ?? "").toUpperCase() === activeTeam;
-        const playerIdentities = [
-            player?.riotIdGameName,
-            player?.summonerName,
-            player?.riotId
-        ].flatMap(normalizeMatchOrderIdentity);
-        const sharesIdentity = playerIdentities.some(identity => identities.has(identity));
-        return sharesIdentity;
-    });
+    let matchedPlayer = findActivePlayer(data);
     if (!matchedPlayer && activeTeam && activeChampion) {
         matchedPlayer = players.find(player =>
             String(player?.team ?? "").toUpperCase() === activeTeam &&
@@ -81,17 +55,6 @@ function findMatchOrderPlayer(activePlayer, players) {
         );
     }
 
-    if (matchedPlayer) {
-        for (const identity of [
-            matchedPlayer.riotIdGameName,
-            matchedPlayer.summonerName,
-            matchedPlayer.riotId
-        ]) {
-            for (const variant of normalizeMatchOrderIdentity(identity)) {
-                identities.add(variant);
-            }
-        }
-    }
     return matchedPlayer;
 }
 
@@ -365,20 +328,9 @@ async function updateMatchOrder() {
     matchOrderUpdateInProgress = true;
 
     try {
-        let response;
-        try {
-            response = await fetch(MATCH_ORDER_URL, { cache: "no-store" });
-        } catch (error) {
-            handleMatchOrderUnavailable(error);
-            return;
-        }
-        if (!response.ok) {
-            handleMatchOrderUnavailable(new Error(`status ${response.status}`));
-            return;
-        }
         let result;
         try {
-            result = await response.json();
+            result = await fetchLiveGameData();
         } catch (error) {
             handleMatchOrderUnavailable(error);
             return;
@@ -393,8 +345,7 @@ async function updateMatchOrder() {
         }
         matchOrderUnavailableCount = 0;
 
-        const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
-        if (!MATCH_ORDER_ALLOWED_GAME_MODES.includes(gameMode)) {
+        if (!isAllowedGameMode(data, MATCH_ORDER_ALLOWED_GAME_MODES)) {
             hideMatchOrder();
             matchOrderStarted = false;
             matchOrderEnded = false;
@@ -402,7 +353,7 @@ async function updateMatchOrder() {
             return;
         }
 
-        const gameStart = events.find(event => event?.EventName === "GameStart");
+        const gameStart = findGameEvent(events, "GameStart");
         if (gameStart) {
             const startEventId = String(gameStart.EventID ?? gameStart.EventTime ?? "GameStart");
             if (!matchOrderStarted || matchOrderStartEventId !== startEventId) {
@@ -412,8 +363,8 @@ async function updateMatchOrder() {
         if (!matchOrderStarted) return;
 
         const players = Array.isArray(data.allPlayers) ? data.allPlayers : [];
-        const player = findMatchOrderPlayer(data.activePlayer, players);
-        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        const player = findMatchOrderPlayer(data, players);
+        const gameTime = getGameTime(data);
         if (Number.isFinite(gameTime)) matchOrderLastGameTime = gameTime;
         recordMatchOrderInventory(player?.items, matchOrderLastGameTime);
         const championName = String(data.activePlayer?.championName ?? "").trim();
@@ -424,7 +375,7 @@ async function updateMatchOrder() {
         }
 
         recordMatchOrderSkills(data.activePlayer?.abilities);
-        if (events.some(event => event?.EventName === "GameEnd")) {
+        if (isGameEnded(data)) {
             matchOrderEnded = true;
         }
         renderMatchOrder();

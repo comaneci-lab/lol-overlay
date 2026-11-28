@@ -1,4 +1,3 @@
-const OBJECT_TIMER_URL = "/allgamedata";
 const OBJECT_TIMER_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR"];
 const OBJECT_TIMER_LEAD_TIME = 3 * 60;
 
@@ -173,15 +172,10 @@ async function updateObjectTimers() {
     isUpdatingObjectTimers = true;
 
     try {
-        const response = await fetch(OBJECT_TIMER_URL, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`status ${response.status}`);
-        }
-
-        const gameDataResponse = await response.json();
+        const gameDataResponse = await fetchLiveGameData();
         const data = gameDataResponse?.data;
-        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
-        const gameMode = String(data?.gameData?.gameMode ?? "").toUpperCase();
+        const gameTime = getGameTime(data);
+        const gameMode = getGameMode(data);
         const isSpectatorMode = data?.isSpectatorMode === true ||
             gameMode === "SPECTATOR" || !data?.activePlayer;
         window.isSpectatorMode = isSpectatorMode;
