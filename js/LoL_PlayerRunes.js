@@ -1,4 +1,3 @@
-const PLAYER_RUNES_GAME_DATA_URL = "/allgamedata";
 const PLAYER_RUNES_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR"];
 const PLAYER_RUNES_METADATA_URL = "/runes";
 const PLAYER_RUNES_DISPLAY_DURATION = 10000;
@@ -217,23 +216,15 @@ async function updatePlayerRunes() {
     playerRunesUpdateInProgress = true;
 
     try {
-        const response = await fetch(PLAYER_RUNES_GAME_DATA_URL, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`game data request failed: status ${response.status}`);
-        }
-
-        const result = await response.json();
+        const result = await fetchLiveGameData();
         const data = result?.data;
-        const events = data?.events?.Events;
         if (result?.ok === true) {
-            const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
-            const allowed = PLAYER_RUNES_ALLOWED_GAME_MODES.includes(gameMode);
+            const allowed = isAllowedGameMode(data, PLAYER_RUNES_ALLOWED_GAME_MODES);
             playerRunesCanvas.classList.toggle("game-mode-disallowed", !allowed);
             if (!allowed) return;
         }
         if (playerRunesShown) return;
-        if (result?.ok !== true || !Array.isArray(events) ||
-            !events.some(event => event?.EventName === "GameStart")) {
+        if (result?.ok !== true || !isGameStarted(data)) {
             return;
         }
 

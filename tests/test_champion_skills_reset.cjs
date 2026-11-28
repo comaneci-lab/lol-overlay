@@ -34,6 +34,8 @@ function createOverlay() {
     const canvas = createElement();
     const confirmationMessages = [];
     let confirmResult = true;
+    let gameResponse = { ok: true, data: { allPlayers: [] } };
+    let gameHttpOk = true;
     const stored = new Map([
         ["lol-overlay.champion-skills.lineup", JSON.stringify({
             ORDER: { TOP: "Ahri" },
@@ -42,7 +44,7 @@ function createOverlay() {
     ]);
     const responseFor = url => {
         if (url === "/allgamedata") {
-            return { ok: true, data: { allPlayers: [] } };
+            return gameResponse;
         }
         if (url === "/champions") {
             return { ok: true, data: { data: {
@@ -72,7 +74,11 @@ function createOverlay() {
             getItem(key) { return stored.get(key) ?? null; },
             setItem(key, value) { stored.set(key, value); }
         },
-        fetch: async url => ({ ok: true, json: async () => responseFor(url) }),
+        fetch: async url => ({
+            ok: url !== "/allgamedata" || gameHttpOk,
+            status: 503,
+            json: async () => responseFor(url)
+        }),
         console: { error() {} },
         setInterval() {}
     });
@@ -80,12 +86,15 @@ function createOverlay() {
         path.join(__dirname, "..", "js", "LoL_ChampionSkills.js"),
         "utf8"
     );
+    vm.runInContext(fs.readFileSync(path.join(__dirname, "..", "js", "LoL_Api.js"), "utf8"), context);
     vm.runInContext(source, context);
     return {
         canvas,
         context,
         stored,
         confirmationMessages,
+        setGameResponse(value) { gameResponse = value; },
+        setGameHttpOk(value) { gameHttpOk = value; },
         setConfirmResult(value) { confirmResult = value; }
     };
 }
@@ -137,4 +146,33 @@ test("manual mode can reset all champions, while live mode has no reset button",
         context
     );
     assert.equal(findByClass(canvas, "champion-skills-reset"), null);
+});
+
+test("live board survives two unavailable polls and resets after the third", async () => {
+    const overlay = createOverlay();
+    await new Promise(resolve => setImmediate(resolve));
+    vm.runInContext('championSkillsCurrentMode = "live"', overlay.context);
+    overlay.setGameResponse({ ok: false });
+    await vm.runInContext("updateChampionSkills()", overlay.context);
+    overlay.setGameHttpOk(false);
+    await vm.runInContext("updateChampionSkills()", overlay.context);
+    assert.equal(vm.runInContext("championSkillsCurrentMode", overlay.context), "live");
+    assert.equal(vm.runInContext("championSkillsEndPollFailures", overlay.context), 2);
+    overlay.setGameHttpOk(true);
+    await vm.runInContext("updateChampionSkills()", overlay.context);
+    assert.equal(vm.runInContext("championSkillsCurrentMode", overlay.context), "manual");
+    assert.equal(vm.runInContext("championSkillsEndPollFailures", overlay.context), 0);
+});
+
+test("empty players end the live board immediately but malformed players do not", async () => {
+    const overlay = createOverlay();
+    await new Promise(resolve => setImmediate(resolve));
+    vm.runInContext('championSkillsCurrentMode = "live"', overlay.context);
+    overlay.setGameResponse({ ok: true, data: {} });
+    await vm.runInContext("updateChampionSkills()", overlay.context);
+    assert.equal(vm.runInContext("championSkillsCurrentMode", overlay.context), "live");
+    assert.equal(vm.runInContext("championSkillsEndPollFailures", overlay.context), 0);
+    overlay.setGameResponse({ ok: true, data: { allPlayers: [] } });
+    await vm.runInContext("updateChampionSkills()", overlay.context);
+    assert.equal(vm.runInContext("championSkillsCurrentMode", overlay.context), "manual");
 });

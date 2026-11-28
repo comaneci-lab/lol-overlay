@@ -26,8 +26,8 @@ function buildPositionRows(playerDict) {
     const rows = [];
 
     for (const pos of positions) {
-        const order = Object.values(playerDict).find(p => p.position === pos && p.team === "ORDER");
-        const chaos = Object.values(playerDict).find(p => p.position === pos && p.team === "CHAOS");
+        const order = Object.values(playerDict).find(p => p.position === pos && isOrderTeam(p.team));
+        const chaos = Object.values(playerDict).find(p => p.position === pos && isChaosTeam(p.team));
 
         const orderGold = order?.total_price ?? 0;
         const chaosGold = chaos?.total_price ?? 0;

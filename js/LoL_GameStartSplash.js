@@ -1,4 +1,3 @@
-const GAME_START_SPLASH_URL = "/allgamedata";
 const GAME_START_SPLASH_ALLOWED_GAME_MODES = ["CLASSIC", "PRACTICETOOL", "SPECTATOR", "ARAM"];
 const GAME_START_SPLASH_ROLES = ["TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY"];
 const GAME_START_SPLASH_SKIN_PREFIXES = [
@@ -240,23 +239,15 @@ async function updateGameStartSplash() {
     gameStartSplashUpdateInProgress = true;
 
     try {
-        const response = await fetch(GAME_START_SPLASH_URL, { cache: "no-store" });
-        if (!response.ok) {
-            throw new Error(`status ${response.status}`);
-        }
-
-        const gameDataResponse = await response.json();
+        const gameDataResponse = await fetchLiveGameData();
         const data = gameDataResponse?.data;
-        const events = data?.events?.Events;
         if (gameDataResponse?.ok === true) {
-            const gameMode = String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
-            const allowed = GAME_START_SPLASH_ALLOWED_GAME_MODES.includes(gameMode);
+            const allowed = isAllowedGameMode(data, GAME_START_SPLASH_ALLOWED_GAME_MODES);
             gameStartSplashCanvas.classList.toggle("game-mode-disallowed", !allowed);
             if (!allowed) return;
         }
         if (gameStartSplashStarted) return;
-        if (gameDataResponse?.ok !== true || !Array.isArray(events) ||
-            !events.some(event => event?.EventName === "GameStart")) {
+        if (gameDataResponse?.ok !== true || !isGameStarted(data)) {
             return;
         }
         if (!Array.isArray(data?.allPlayers)) {

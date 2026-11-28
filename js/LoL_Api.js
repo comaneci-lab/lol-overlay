@@ -22,29 +22,106 @@ function getPlayerDict() {
     return window.playerDict;
 }
 
+function getGameTime(data) {
+    return Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+}
+
+function getGameMode(data) {
+    return String(data?.gameData?.gameMode ?? "").trim().toUpperCase();
+}
+
+function isAllowedGameMode(data, modes) {
+    const mode = getGameMode(data);
+    return Array.from(modes ?? []).some(candidate =>
+        String(candidate).trim().toUpperCase() === mode
+    );
+}
+
+function findGameEvent(events, name) {
+    return Array.isArray(events) ? events.find(event => event?.EventName === name) : undefined;
+}
+
+function hasGameEvent(events, name) {
+    return findGameEvent(events, name) !== undefined;
+}
+
+function isGameStarted(data) {
+    return hasGameEvent(data?.events?.Events, "GameStart");
+}
+
+function isGameEnded(data) {
+    return hasGameEvent(data?.events?.Events, "GameEnd");
+}
+
+function getRawPlayerIdentities(player) {
+    const values = typeof player === "string"
+        ? [player]
+        : [player?.riotIdGameName, player?.summonerName, player?.riotId];
+    return [...new Set(values.filter(value => typeof value === "string" && value.trim())
+        .map(value => value.trim().toLowerCase()))];
+}
+
+function getPlayerIdentities(player) {
+    return [...new Set(getRawPlayerIdentities(player).flatMap(identity =>
+        [identity, identity.split("#", 1)[0].trim()].filter(Boolean)
+    ))];
+}
+
+function isSamePlayer(a, b) {
+    const fullA = getRawPlayerIdentities(a).filter(identity => identity.includes("#"));
+    const fullB = getRawPlayerIdentities(b).filter(identity => identity.includes("#"));
+    if (fullA.length && fullB.length) {
+        return fullA.some(identity => fullB.includes(identity));
+    }
+    const identities = new Set(getPlayerIdentities(a));
+    return getPlayerIdentities(b).some(identity => identities.has(identity));
+}
+
+function findActivePlayer(data) {
+    if (!Array.isArray(data?.allPlayers)) return undefined;
+    const activeFull = new Set(getRawPlayerIdentities(data?.activePlayer)
+        .filter(identity => identity.includes("#")));
+    const exact = data.allPlayers.filter(player => getRawPlayerIdentities(player)
+        .some(identity => activeFull.has(identity)));
+    if (exact.length) return exact.length === 1 ? exact[0] : undefined;
+    const matches = data.allPlayers.filter(player => isSamePlayer(player, data?.activePlayer));
+    return matches.length === 1 ? matches[0] : undefined;
+}
+
+function isOrderTeam(team) {
+    return String(team ?? "").trim().toUpperCase() === "ORDER";
+}
+
+function isChaosTeam(team) {
+    return String(team ?? "").trim().toUpperCase() === "CHAOS";
+}
+
+function getMyTeam(data) {
+    if (data?.isSpectatorMode === true || isSpectatorGameData(data)) return "ORDER";
+    const activeTeam = data?.activePlayer?.team;
+    const team = isOrderTeam(activeTeam) || isChaosTeam(activeTeam)
+        ? activeTeam : findActivePlayer(data)?.team;
+    return isChaosTeam(team) ? "CHAOS" : "ORDER";
+}
+
+function getEnemyTeam(team) {
+    return isOrderTeam(team) ? "CHAOS" : isChaosTeam(team) ? "ORDER" : undefined;
+}
+
+function isAllyTeam(team) {
+    const myTeam = window.isSpectatorMode ? "ORDER" : window.myTeam;
+    return (isOrderTeam(team) && isOrderTeam(myTeam)) ||
+        (isChaosTeam(team) && isChaosTeam(myTeam));
+}
+
 function isSpectatorGameData(data) {
-    const gameMode = String(data?.gameData?.gameMode ?? "").toUpperCase();
-    if (gameMode === "SPECTATOR") return true;
+    if (getGameMode(data) === "SPECTATOR") return true;
 
     const activePlayer = data?.activePlayer;
     if (!activePlayer) return true;
 
-    const activePlayerTeam = String(activePlayer.team ?? "").toUpperCase();
-    if (activePlayerTeam === "ORDER" || activePlayerTeam === "CHAOS") return false;
-
-    const getIdentityVariants = (player) => [player?.riotIdGameName, player?.summonerName, player?.riotId]
-        .filter(identity => typeof identity === "string" && identity.trim())
-        .flatMap(identity => {
-            const normalizedIdentity = identity.trim().toLowerCase();
-            return [normalizedIdentity, normalizedIdentity.split("#", 1)[0]];
-        });
-
-    const activeIdentities = new Set(getIdentityVariants(activePlayer));
-    if (activeIdentities.size === 0) return true;
-
-    return !data.allPlayers.some(player =>
-        getIdentityVariants(player).some(identity => activeIdentities.has(identity))
-    );
+    if (isOrderTeam(activePlayer.team) || isChaosTeam(activePlayer.team)) return false;
+    return !findActivePlayer(data);
 }
 
 function setPlayerDict(playerDict) {
@@ -246,18 +323,139 @@ async function loadRuneIconMapFromProxy() {
 
 
 
+async function fetchLiveGameData() {
+    const response = await fetch(ALLGANEDATA_URL, { cache: "no-store" });
+    if (!response.ok) throw new Error("API fetch failed: " + response.status);
+    return response.json();
+}
+
+// Poll immediately, then after each completed poll. Unavailability is reported once
+// per outage and retains event history; a clock rewind, changed GameStart, or a new
+// event list after an ended game resets it. Missing GameStart also resets it.
+// Callbacks receive unwrapped data (onEvent receives event, data); they may be async.
+// onData runs for every valid response, including responses without an events array.
+function createGameLifecycleWatcher({ onData, onStart, onEnd, onEvent, onUnavailable, intervalMs = 1000 } = {}) {
+    let running = false;
+    let inFlight = false;
+    let timer = null;
+    let generation = 0;
+    let available = null;
+    let started = false;
+    let ended = false;
+    let lastTime = NaN;
+    let startEvent = null;
+    let seenEvents = new Set();
+
+    function reset() {
+        started = false;
+        ended = false;
+        lastTime = NaN;
+        startEvent = null;
+        seenEvents = new Set();
+    }
+
+    async function notify(callback, ...args) {
+        if (!callback) return;
+        try {
+            await callback(...args);
+        } catch (error) {
+            console.error("game lifecycle callback error:", error);
+        }
+    }
+
+    function schedule(delay) {
+        if (running && timer === null && !inFlight) {
+            timer = setTimeout(() => {
+                timer = null;
+                poll();
+            }, delay);
+        }
+    }
+
+    async function poll() {
+        if (!running || inFlight) return;
+        inFlight = true;
+        const currentGeneration = generation;
+        const active = () => running && generation === currentGeneration;
+        try {
+            const root = await fetchLiveGameData();
+            if (!active()) return;
+            if (root?.ok !== true || !root.data || typeof root.data !== "object") {
+                throw new Error("Live game data unavailable");
+            }
+            const data = root.data;
+            const time = getGameTime(data);
+            const hasEvents = Array.isArray(data?.events?.Events);
+            const currentStart = findGameEvent(data?.events?.Events, "GameStart");
+            const hasStart = !!currentStart;
+            const startChanged = currentStart && startEvent &&
+                ["EventID", "EventTime"].some(key => currentStart[key] != null &&
+                    startEvent[key] != null && String(currentStart[key]) !== String(startEvent[key]));
+            if ((Number.isFinite(time) && Number.isFinite(lastTime) && time < lastTime) ||
+                (started && hasEvents && !hasStart) || startChanged ||
+                (ended && hasStart && !isGameEnded(data))) reset();
+            if (Number.isFinite(time)) lastTime = time;
+            if (currentStart) {
+                startEvent = {
+                    EventID: currentStart.EventID ?? startEvent?.EventID,
+                    EventTime: currentStart.EventTime ?? startEvent?.EventTime
+                };
+            }
+            available = true;
+
+            await notify(onData, data);
+            if (!active()) return;
+            if (hasStart && !started) {
+                started = true;
+                await notify(onStart, data);
+                if (!active()) return;
+            }
+            const events = Array.isArray(data?.events?.Events) ? data.events.Events : [];
+            for (const [index, event] of events.entries()) {
+                if (!event || typeof event !== "object") continue;
+                const key = event.EventID != null
+                    ? `id:${event.EventID}` : `index:${index}:${JSON.stringify(event)}`;
+                if (seenEvents.has(key)) continue;
+                seenEvents.add(key);
+                await notify(onEvent, event, data);
+                if (!active()) return;
+            }
+            if (isGameEnded(data) && !ended) {
+                ended = true;
+                await notify(onEnd, data);
+            }
+        } catch (error) {
+            if (active() && available !== false) {
+                available = false;
+                await notify(onUnavailable, error);
+            }
+        } finally {
+            inFlight = false;
+            if (running) schedule(currentGeneration === generation ? intervalMs : 0);
+        }
+    }
+
+    const watcher = {
+        start() {
+            if (running) return;
+            running = true;
+            generation++;
+            if (!inFlight) poll();
+        },
+        stop() {
+            running = false;
+            generation++;
+            if (timer !== null) clearTimeout(timer);
+            timer = null;
+        }
+    };
+    watcher.start();
+    return watcher;
+}
+
 async function fetchGameData() {
     try {
-        //　LiveClientDataAPIを取得
-        const res = await fetch(ALLGANEDATA_URL, { cache: "no-store" });
-
-        // レスポンスのステータスチェック
-        if (!res.ok) {
-            throw new Error("API fetch failed: " + res.status);
-        }
-
-        // レスポンスのデータをJSONとして取得
-        const dataRoot = await res.json();
+        const dataRoot = await fetchLiveGameData();
         // console.log("API raw response:", dataRoot);
 
         if (dataRoot?.ok !== true || !Array.isArray(dataRoot.data?.allPlayers)) {
@@ -265,10 +463,8 @@ async function fetchGameData() {
             return null;
         }
 
-        const events = dataRoot.data?.events?.Events;
-        currentGameMode = String(dataRoot.data?.gameData?.gameMode ?? "").trim().toUpperCase();
-        setGameStarted(Array.isArray(events) &&
-            events.some(event => event?.EventName === "GameStart"));
+        currentGameMode = getGameMode(dataRoot.data);
+        setGameStarted(isGameStarted(dataRoot.data));
         window.isSpectatorMode = isSpectatorGameData(dataRoot.data);
         setOverlayDataAvailable(true);
         latestGameData = dataRoot.data;
@@ -435,34 +631,17 @@ async function refreshPlayerDict() {
 function makePlayerTeamMap(players) {
     const teams = Object.create(null);
     players.forEach(p => {
-        const identities = [p.riotIdGameName, p.summonerName, p.riotId];
-        for (const identity of identities) {
-            if (typeof identity === "string" && identity.trim()) {
-                const normalizedIdentity = identity.trim().toLowerCase();
-                teams[normalizedIdentity] = p.team;
-                teams[normalizedIdentity.split("#", 1)[0]] = p.team;
-            }
+        for (const identity of getPlayerIdentities(p)) {
+            teams[identity] = p.team;
         }
     });
     return teams;
 }
 
 function initPlayerTeamMap(dataRoot) {
-    playerTeamMap = makePlayerTeamMap(dataRoot.data.allPlayers);
-
-    const activePlayer = dataRoot.data?.activePlayer;
-    if (activePlayer) {
-        const riotId = typeof activePlayer.riotId === "string"
-            ? activePlayer.riotId.trim().toLowerCase()
-            : "";
-        const summonerName = typeof activePlayer.summonerName === "string"
-            ? activePlayer.summonerName.trim().toLowerCase()
-            : "";
-        const team = activePlayer.team ?? playerTeamMap[riotId] ?? playerTeamMap[summonerName];
-        window.myTeam = team ?? "ORDER";
-    } else {
-        window.myTeam = "ORDER";
-    }
+    const data = dataRoot?.data;
+    playerTeamMap = makePlayerTeamMap(Array.isArray(data?.allPlayers) ? data.allPlayers : []);
+    window.myTeam = getMyTeam(data);
 }
 
 
@@ -510,12 +689,11 @@ function applyEvent(ev, gameTime) {
 async function updateEvents() {
     try {
 
-        const res = await fetch(ALLGANEDATA_URL);
-        const dataRoot = await res.json();
+        const dataRoot = await fetchLiveGameData();
         const data = dataRoot.data;
 
         const events = data?.events?.Events ?? [];
-        const gameTime = Number(data?.gameData?.gameTime ?? data?.gameData?.gametime);
+        const gameTime = getGameTime(data);
         window.isSpectatorMode = data?.isSpectatorMode === true || isSpectatorGameData(data);
 
         if (Object.keys(playerTeamMap).length === 0 && Array.isArray(data?.allPlayers)) {
